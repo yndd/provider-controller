@@ -3,11 +3,14 @@ module github.com/yndd/provider-controller
 go 1.17
 
 require (
+	github.com/jetstack/cert-manager v1.7.1
 	github.com/pkg/errors v0.9.1
 	github.com/yndd/ndd-core v0.2.13
 	github.com/yndd/ndd-runtime v0.5.8
 	github.com/yndd/ndd-target-runtime v0.0.38
 	github.com/yndd/registrator v0.0.4
+	k8s.io/api v0.24.0
+	k8s.io/apiextensions-apiserver v0.23.5
 	k8s.io/apimachinery v0.24.0
 	sigs.k8s.io/controller-runtime v0.11.2
 )
@@ -16,7 +19,7 @@ require (
 	cloud.google.com/go v0.95.0 // indirect
 	cloud.google.com/go/storage v1.16.1 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Microsoft/go-winio v0.5.0 // indirect
+	github.com/Microsoft/go-winio v0.5.1 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20210920160938-87db9fbc61c7 // indirect
 	github.com/Shopify/ejson v1.3.0 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
@@ -135,8 +138,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 	inet.af/netaddr v0.0.0-20210903134321-85fa6c94624e // indirect
-	k8s.io/api v0.24.0 // indirect
-	k8s.io/apiextensions-apiserver v0.23.5 // indirect
 	k8s.io/client-go v0.23.5 // indirect
 	k8s.io/component-base v0.23.5 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect
