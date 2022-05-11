@@ -1,0 +1,12 @@
+domain: yndd.io
+layout:
+- go.kubebuilder.io/v3
+projectName: temp
+repo: github.com/yndd/provider-controller
+resources:
+- controller: true
+  domain: yndd.io
+  group: pkg.ndd.yndd.io
+  kind: ControllerConfig
+  version: v1alpha1
+version: "3"

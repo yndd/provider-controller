@@ -17,8 +17,8 @@ limitations under the License.
 package lcm_controller
 
 import (
-	certv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	certmetav1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
+	certv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	certmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
