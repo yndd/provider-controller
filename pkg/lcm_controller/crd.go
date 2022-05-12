@@ -20,8 +20,8 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/types"
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // getCrds retrieves the crds from the k8s api based on the crNames

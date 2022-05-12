@@ -30,7 +30,6 @@ import (
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -110,17 +109,26 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+// WithRegistrator specifies how the Reconciler registers and discover services
+func WithRegistrator(reg registrator.Registrator) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.registrator = reg
+	}
+}
+
 // SetupProvider adds a controller that reconciles Providers.
-func Setup(mgr ctrl.Manager, o controller.Options, nddopts *shared.NddControllerOptions) error {
+func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 	name := "config-controller/" + strings.ToLower(pkgmetav1.ControllerConfigGroupKind)
 
 	r := NewReconciler(mgr,
+		WithRegistrator(nddopts.Registrator),
 		WithCrdNames(nddopts.CrdNames),
 		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(nddopts.Copts).
 		Named(name).
 		For(&pkgmetav1.ControllerConfig{}).
 		Owns(&pkgmetav1.ControllerConfig{}).
@@ -186,6 +194,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, errors.Wrap(err, "cannot deploy")
 	}
 
+	// list targets
+	// query consul
+
+	var s []*registrator.Service
+	for _, serviceName := range r.getServices(ctrlMetaCfg) {
+		var err error
+		s, err = r.registrator.Query(ctx, serviceName, []string{})
+		if err != nil {
+			// todo
+		}
+	}
+
+	// based on logic update replicas in the spac
+
 	log.Debug("target allocation and validation successfull")
+	// a scale out/in action is triggered by periodically reconciliation (building inventory and deciding on the replicas)
 	return reconcile.Result{RequeueAfter: r.pollInterval}, nil
+}
+
+func (r *Reconciler) getServices(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
+	services := make([]string, 0, len(ctrlMetaCfg.Spec.Pods)+1)
+	for _, pod := range ctrlMetaCfg.Spec.Pods {
+		services = append(services, strings.Join([]string{ctrlMetaCfg.Name, pod.Name}, "-"))
+		break
+	}
+	services = append(services, strings.Join([]string{ctrlMetaCfg.Name, "target"}, "-"))
+	return services
 }

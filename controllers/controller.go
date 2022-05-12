@@ -21,16 +21,16 @@ import (
 	alloccontroller "github.com/yndd/provider-controller/pkg/allocation_controller"
 	lcmcontroller "github.com/yndd/provider-controller/pkg/lcm_controller"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 // Setup package controllers.
-func Setup(mgr ctrl.Manager, option controller.Options, nddcopts *shared.NddControllerOptions) error {
-	for _, setup := range []func(ctrl.Manager, controller.Options, *shared.NddControllerOptions) error{
+func Setup(mgr ctrl.Manager, nddcopts *shared.NddControllerOptions) error {
+
+	for _, setup := range []func(ctrl.Manager, *shared.NddControllerOptions) error{
 		lcmcontroller.Setup,
 		alloccontroller.Setup,
 	} {
-		if err := setup(mgr, option, nddcopts); err != nil {
+		if err := setup(mgr, nddcopts); err != nil {
 			return err
 		}
 	}

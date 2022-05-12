@@ -16,10 +16,11 @@ type Watcher interface {
 
 type watcher struct {
 	// k8s event channel
-	eventCh chan event.GenericEvent
+	eventCh  chan event.GenericEvent
+	identity string
 }
 
-func New(eventCh chan event.GenericEvent) Watcher {
+func New(identity string, eventCh chan event.GenericEvent) Watcher {
 	return &watcher{
 		eventCh: eventCh,
 	}
@@ -39,7 +40,7 @@ START:
 	}
 
 	ch := make(chan *registrator.ServiceResponse)
-	for _, serviceName := range getServices(ctrlMetaCfg) {
+	for _, serviceName := range w.getServices(ctrlMetaCfg) {
 		go r.WatchCh(ctx, serviceName, []string{}, ch)
 	}
 
@@ -70,10 +71,16 @@ START:
 	}
 }
 
-func getServices(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
+func (w *watcher) getServices(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
 	services := make([]string, 0, len(ctrlMetaCfg.Spec.Pods)+1)
 	for _, pod := range ctrlMetaCfg.Spec.Pods {
+		for _, watcher := range pod.Watchers {
+			if w.identity != watcher {
+				continue
+			}
+		}
 		services = append(services, strings.Join([]string{ctrlMetaCfg.Name, pod.Name}, "-"))
+		break
 	}
 	services = append(services, strings.Join([]string{ctrlMetaCfg.Name, "target"}, "-"))
 	return services

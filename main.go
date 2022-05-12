@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"os"
 
@@ -33,10 +34,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/ratelimiter"
 	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
+	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/provider-controller/controllers"
+	"github.com/yndd/registrator/registrator"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,19 +61,22 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var concurrency int
+	var serviceDiscoveryNamespace string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.IntVar(&concurrency, "concurrency", 1, "controller max concurrency")
+	flag.StringVar(&serviceDiscoveryNamespace, "service-discovery-namespace", "", "the namespace for service discovery")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	logger := zap.New(zap.UseFlagOptions(&opts))
+	ctrl.SetLogger(logger)
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -83,11 +90,23 @@ func main() {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	reg := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
+		registrator.WithClient(resource.ClientApplicator{
+			mgr.GetClient(),
+			resource.NewAPIPatchingApplicator(mgr.GetClient()),
+		}),
+		registrator.WithLogger(logging.NewLogrLogger(logger)))
+
 	copts := controller.Options{
 		MaxConcurrentReconciles: concurrency,
 		RateLimiter:             ratelimiter.NewDefaultProviderRateLimiter(ratelimiter.DefaultProviderRPS),
 	}
-	if err = controllers.Setup(mgr, copts, &shared.NddControllerOptions{}); err != nil {
+	if err = controllers.Setup(mgr, &shared.NddControllerOptions{
+		Registrator: reg,
+		Copts: copts,
+	}); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "ControllerConfig")
 		os.Exit(1)
 	}
