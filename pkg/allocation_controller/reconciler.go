@@ -28,7 +28,6 @@ import (
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -98,17 +97,26 @@ func WithRecorder(er event.Recorder) ReconcilerOption {
 	}
 }
 
+// WithRegistrator specifies how the Reconciler registers and discover services
+func WithRegistrator(reg registrator.Registrator) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.registrator = reg
+	}
+}
+
 // SetupProvider adds a controller that reconciles Providers.
-func Setup(mgr ctrl.Manager, o controller.Options, nddopts *shared.NddControllerOptions) error {
+func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 	name := "config-controller/" + strings.ToLower(targetv1.TargetGroupKind)
 
 	r := NewReconciler(mgr,
+		WithRegistrator(nddopts.Registrator),
 		WithCrdNames(nddopts.CrdNames),
 		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
 	return ctrl.NewControllerManagedBy(mgr).
+		WithOptions(nddopts.Copts).
 		Named(name).
 		For(&targetv1.Target{}).
 		Complete(r)
@@ -142,6 +150,15 @@ func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("NameSpaceName", req.NamespacedName)
 	log.Debug("allocation reconciler start...")
+
+	// build inventory interface
+	// -> per worker and reconciler we identify the targets for each and will be able to select
+
+	
+	// if the allocation in the spec is not done
+	// get least loaded instance per serviceName
+	// 
+
 
 	return reconcile.Result{}, nil
 }
