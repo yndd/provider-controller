@@ -1,0 +1,18 @@
+
+apiVersion: meta.pkg.ndd.yndd.io/v1
+kind: Provider
+metadata:
+  name: provider-controller
+spec:
+  type: controller
+  controller:
+    image: yndd/provider-controller-controller:latest
+    permissionRequests:
+    - apiGroups: [dvr.ndd.yndd.io]
+      resources: [targets]
+      verbs: [get, list, watch, update, patch, create, delete]
+    #apis:
+    #- {group: srl.config.ndd.yndd.io, version: v1alpha1, kind: srlconfig}
+    
+          
+

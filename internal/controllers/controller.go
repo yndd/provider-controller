@@ -18,8 +18,8 @@ package controllers
 
 import (
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
-	alloccontroller "github.com/yndd/provider-controller/pkg/allocation_controller"
-	lcmcontroller "github.com/yndd/provider-controller/pkg/lcm_controller"
+	"github.com/yndd/provider-controller/internal/controllers/alloccontroller"
+	"github.com/yndd/provider-controller/internal/controllers/lcmcontroller"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 

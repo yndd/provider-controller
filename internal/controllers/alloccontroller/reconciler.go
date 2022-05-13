@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package alloccontroller
 
 import (
 	"context"
@@ -35,6 +35,7 @@ import (
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -107,6 +108,7 @@ func WithRegistrator(reg registrator.Registrator) ReconcilerOption {
 // SetupProvider adds a controller that reconciles Providers.
 func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 	name := "config-controller/" + strings.ToLower(targetv1.TargetGroupKind)
+	tgl := func() targetv1.TgList { return &targetv1.TargetList{} }
 
 	r := NewReconciler(mgr,
 		WithRegistrator(nddopts.Registrator),
@@ -114,10 +116,19 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
+	ControllerConfigHandler := &EnqueueRequestForAllControllerConfig{
+		client:        mgr.GetClient(),
+		log:           nddopts.Logger,
+		ctx:           context.Background(),
+		newTargetList: tgl,
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(nddopts.Copts).
 		Named(name).
 		For(&targetv1.Target{}).
+		WithEventFilter(resource.IgnoreUpdateWithoutGenerationChangePredicate()).
+		Watches(&source.Kind{Type: &pkgmetav1.ControllerConfig{}}, ControllerConfigHandler).
 		Complete(r)
 }
 
@@ -240,7 +251,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 				availableTargetServiceInstances, err := r.registrator.Query(
 					ctx,
 					targetServiceInfo.ServiceName,
-					[]string{fmt.Sprintf("target=%s-%s", t.GetNamespace(), t.GetName())},
+					[]string{fmt.Sprintf("target=%s/%s", t.GetNamespace(), t.GetName())},
 				)
 				if err != nil {
 					log.Debug("cannot query service registry", "error", err)

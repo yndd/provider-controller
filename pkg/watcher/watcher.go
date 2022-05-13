@@ -2,7 +2,6 @@ package watcher
 
 import (
 	"context"
-	"strings"
 
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	"github.com/yndd/registrator/registrator"
@@ -40,8 +39,10 @@ START:
 	}
 
 	ch := make(chan *registrator.ServiceResponse)
-	for _, serviceInfo := range ctrlMetaCfg.GetAllServicesInfo() {
-		go r.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
+	for _, pod := range ctrlMetaCfg.Spec.Pods {
+		for _, serviceInfo := range ctrlMetaCfg.GetServicesInfoByKind(pod.Kind) {
+			go r.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
+		}
 	}
 
 	for {
@@ -69,19 +70,4 @@ START:
 			}
 		}
 	}
-}
-
-func (w *watcher) getServices(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
-	services := make([]string, 0, len(ctrlMetaCfg.Spec.Pods)+1)
-	for _, pod := range ctrlMetaCfg.Spec.Pods {
-		for _, watcher := range pod.Watchers {
-			if w.identity != watcher {
-				continue
-			}
-		}
-		services = append(services, strings.Join([]string{ctrlMetaCfg.Name, pod.Name}, "-"))
-		break
-	}
-	services = append(services, strings.Join([]string{ctrlMetaCfg.Name, "target"}, "-"))
-	return services
 }
