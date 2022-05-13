@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (r *Reconciler) renderServiceAccount(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision) *corev1.ServiceAccount {
+func renderServiceAccount(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),

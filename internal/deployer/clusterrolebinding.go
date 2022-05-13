@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
@@ -29,7 +29,7 @@ const (
 )
 
 // renderClusterRoles returns ClusterRoles
-func (r *Reconciler) renderClusterRoleBinding(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision) *rbacv1.ClusterRoleBinding {
+func renderClusterRoleBinding(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision) *rbacv1.ClusterRoleBinding {
 	roleName := getRoleName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name)
 	cbrName := systemClusterProviderRoleName(roleName)
 

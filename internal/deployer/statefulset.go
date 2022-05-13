@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	"path/filepath"
@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (r *Reconciler) renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision) *appsv1.StatefulSet {
+func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision) *appsv1.StatefulSet {
 	s := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),
@@ -49,7 +49,7 @@ func (r *Reconciler) renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, 
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext:    getPodSecurityContext(),
-					ServiceAccountName: r.renderServiceAccount(ctrlMetaCfg, podSpec, revision).GetName(),
+					ServiceAccountName: renderServiceAccount(ctrlMetaCfg, podSpec, revision).GetName(),
 					ImagePullSecrets:   revision.GetPackagePullSecrets(),
 					Containers:         getContainers(ctrlMetaCfg, podSpec, revision.GetPackagePullPolicy()),
 					Volumes:            getVolumes(ctrlMetaCfg, podSpec),

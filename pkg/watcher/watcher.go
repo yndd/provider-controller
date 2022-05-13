@@ -40,8 +40,8 @@ START:
 	}
 
 	ch := make(chan *registrator.ServiceResponse)
-	for _, serviceName := range w.getServices(ctrlMetaCfg) {
-		go r.WatchCh(ctx, serviceName, []string{}, ch)
+	for _, serviceInfo := range ctrlMetaCfg.GetAllServicesInfo() {
+		go r.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
 	}
 
 	for {

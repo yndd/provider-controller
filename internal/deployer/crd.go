@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	"context"
@@ -26,15 +26,15 @@ import (
 
 // getCrds retrieves the crds from the k8s api based on the crNames
 // coming from the flags
-func (r *Reconciler) getCrds(ctx context.Context, crdNames []string) ([]extv1.CustomResourceDefinition, error) {
-	log := r.log.WithValues("crdNames", crdNames)
+func (d *deployer) getCrds(ctx context.Context, crdNames []string) ([]extv1.CustomResourceDefinition, error) {
+	log := d.log.WithValues("crdNames", crdNames)
 	log.Debug("getCrds...")
 
 	crds := []extv1.CustomResourceDefinition{}
 	for _, crdName := range crdNames {
 		crd := &extv1.CustomResourceDefinition{}
 		// namespace is not relevant for the crd, hence it is not supplied
-		if err := r.client.Get(ctx, types.NamespacedName{Name: crdName}, crd); err != nil {
+		if err := d.client.Get(ctx, types.NamespacedName{Name: crdName}, crd); err != nil {
 			return nil, errors.Wrap(err, errGetCrd)
 		}
 		crds = append(crds, *crd)

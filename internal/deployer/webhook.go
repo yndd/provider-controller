@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	"strings"
@@ -29,7 +29,7 @@ import (
 	extv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
 
-func (r *Reconciler) renderWebhookMutate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) *admissionv1.MutatingWebhookConfiguration { // nolint:interfacer,gocyclo
+func renderWebhookMutate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) *admissionv1.MutatingWebhookConfiguration { // nolint:interfacer,gocyclo
 	certificateName := getCertificateName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
 	serviceName := getServiceName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
 
@@ -80,7 +80,7 @@ func (r *Reconciler) renderWebhookMutate(ctrlMetaCfg *pkgmetav1.ControllerConfig
 	}
 }
 
-func (r *Reconciler) renderWebhookValidate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) *admissionv1.ValidatingWebhookConfiguration { // nolint:interfacer,gocyclo
+func renderWebhookValidate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) *admissionv1.ValidatingWebhookConfiguration { // nolint:interfacer,gocyclo
 	certificateName := getCertificateName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
 	serviceName := getServiceName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
 

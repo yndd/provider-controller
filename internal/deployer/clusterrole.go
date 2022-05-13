@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
 	"sort"
@@ -69,7 +69,7 @@ var rulesSystemExtra = []rbacv1.PolicyRule{
 */
 
 // renderClusterRoles returns ClusterRoles
-func (r *Reconciler) renderClusterRoles(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) []rbacv1.ClusterRole {
+func renderClusterRoles(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision, crds []extv1.CustomResourceDefinition) []rbacv1.ClusterRole {
 	// Our list of CRDs has no guaranteed order, so we sort them in order to
 	// ensure we don't reorder our RBAC rules on each update.
 	sort.Slice(crds, func(i, j int) bool { return crds[i].GetName() < crds[j].GetName() })

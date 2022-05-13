@@ -14,41 +14,56 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package deployer
 
 import (
-	certv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
-	certmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/meta"
+	corev1 "k8s.io/api/core/v1"
 )
 
-func (r *Reconciler) renderCertificate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *certv1.Certificate { // nolint:interfacer,gocyclo
-	certificateName := getCertificateName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
+func renderService(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *corev1.Service { // nolint:interfacer,gocyclo
 	serviceName := getServiceName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
 
-	return &certv1.Certificate{
+	port := int32(443)
+
+	if extra.Port != 0 {
+		port = int32(extra.Port)
+	}
+	protocol := corev1.Protocol("TCP")
+	if extra.Protocol != "" {
+		protocol = corev1.Protocol(extra.Protocol)
+	}
+	targetPort := int(8443)
+	if extra.TargetPort != 0 {
+		targetPort = int(targetPort)
+	}
+
+	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      certificateName,
+			Name:      serviceName,
 			Namespace: ctrlMetaCfg.Namespace,
 			Labels: map[string]string{
 				getLabelKey(extra.Name): serviceName,
 			},
 			OwnerReferences: []metav1.OwnerReference{meta.AsController(meta.TypedReferenceTo(revision, pkgv1.ProviderRevisionGroupVersionKind))},
 		},
-		Spec: certv1.CertificateSpec{
-			DNSNames: []string{
-				getDnsName(ctrlMetaCfg.Namespace, serviceName),
-				getDnsName(ctrlMetaCfg.Namespace, serviceName, "cluster", "local"),
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				getLabelKey(extra.Name): serviceName,
 			},
-			IssuerRef: certmetav1.ObjectReference{
-				Kind: "Issuer",
-				Name: "selfsigned-issuer",
+			Ports: []corev1.ServicePort{
+				{
+					Name:       extra.Name,
+					Port:       port,
+					TargetPort: intstr.FromInt(targetPort),
+					Protocol:   protocol,
+				},
 			},
-			SecretName: certificateName,
 		},
 	}
 }
