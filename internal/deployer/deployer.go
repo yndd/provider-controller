@@ -101,6 +101,8 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 
 	// getCrds retrieves the crds from the k8s api based on the crNames
 	// coming from the flags
+	//d.crdNames = []string{"srlconfig"}
+	d.crdNames = []string{"srlconfigs.srl.config.ndd.yndd.io"}
 	crds, err := d.getCrds(ctx, d.crdNames)
 	if err != nil {
 		log.Debug(errGetCrd, "error", err)
@@ -114,6 +116,7 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 	if err := d.client.Get(ctx, types.NamespacedName{
 		Namespace: d.revisionNamespace,
 		Name:      d.revision}, pr); err != nil {
+		log.Debug(errGetCrd, "error", err)
 		return err
 	}
 

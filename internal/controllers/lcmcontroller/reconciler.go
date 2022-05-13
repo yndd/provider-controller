@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcm_controller
+package lcmcontroller
 
 import (
 	"context"
@@ -126,6 +126,7 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 
 	r := NewReconciler(mgr,
 		WithRegistrator(nddopts.Registrator),
+		WithRevision(nddopts.Revision, nddopts.RevisionNamespace),
 		WithCrdNames(nddopts.CrdNames),
 		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),

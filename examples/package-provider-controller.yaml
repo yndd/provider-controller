@@ -1,0 +1,8 @@
+apiVersion: pkg.ndd.yndd.io/v1
+kind: Provider
+metadata:
+  name: provider-controller
+  namespace: ndd-system
+spec:
+  package: yndd/provider-controller:latest
+  packagePullPolicy: Always
