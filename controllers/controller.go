@@ -23,7 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-// Setup package controllers.
+// Setup controllers.
 func Setup(mgr ctrl.Manager, nddcopts *shared.NddControllerOptions) error {
 
 	for _, setup := range []func(ctrl.Manager, *shared.NddControllerOptions) error{

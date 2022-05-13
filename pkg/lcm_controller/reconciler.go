@@ -26,8 +26,10 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/event"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/meta"
+	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
 	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
+	"github.com/yndd/provider-controller/internal/deployer"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -68,7 +70,9 @@ type Reconciler struct {
 	client    resource.ClientApplicator
 	finalizer resource.Finalizer
 	// servicediscovery registrator
-	registrator registrator.Registrator
+	registrator   registrator.Registrator
+	deployer      deployer.Deployer
+	newTargetList func() targetv1.TgList
 
 	crdNames          []string
 	revision          string
@@ -139,21 +143,34 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 	//tg := func() targetv1.Tg { return &targetv1.Target{} }
 	//pr := func() pkgv1.PackageRevision { return &pkgv1.ProviderRevision{} }
+	tgl := func() targetv1.TgList { return &targetv1.TargetList{} }
 
 	r := &Reconciler{
 		client: resource.ClientApplicator{
 			Client:     m.GetClient(),
 			Applicator: resource.NewAPIPatchingApplicator(m.GetClient()),
 		},
-		pollInterval: defaultpollInterval,
-		log:          logging.NewNopLogger(),
-		record:       event.NewNopRecorder(),
-		finalizer:    resource.NewAPIFinalizer(m.GetClient(), finalizerName),
+		newTargetList: tgl,
+		pollInterval:  defaultpollInterval,
+		log:           logging.NewNopLogger(),
+		record:        event.NewNopRecorder(),
+		finalizer:     resource.NewAPIFinalizer(m.GetClient(), finalizerName),
 	}
 
 	for _, f := range opts {
 		f(r)
 	}
+
+	r.deployer = deployer.New(
+		deployer.WithClient(
+			resource.ClientApplicator{
+				Client:     m.GetClient(),
+				Applicator: resource.NewAPIPatchingApplicator(m.GetClient()),
+			},
+		),
+		deployer.WithLogger(r.log),
+		deployer.WithRevision(r.revision, r.revisionNamespace),
+	)
 
 	return r
 }
@@ -189,36 +206,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	// we always deploy since this allows us to handle updates of the deploySpec
-	if err := r.deploy(ctx, ctrlMetaCfg, r.crdNames); err != nil {
+	// TODO crd
+	if err := r.deployer.Deploy(ctx, ctrlMetaCfg); err != nil {
 		log.Debug("cannot deploy", "error", err)
 		return reconcile.Result{}, errors.Wrap(err, "cannot deploy")
 	}
 
-	// list targets
-	// query consul
-
-	var s []*registrator.Service
-	for _, serviceName := range r.getServices(ctrlMetaCfg) {
-		var err error
-		s, err = r.registrator.Query(ctx, serviceName, []string{})
-		if err != nil {
-			// todo
+	/*
+		for _, serviceInfo := range ctrlMetaCfg.GetServicesInfo() {
+			// check inventory
+			// scale out based on allocation -> set the replicaset number
 		}
-	}
+	*/
 
-	// based on logic update replicas in the spac
-
+	// based on logic update replicas in the spec
 	log.Debug("target allocation and validation successfull")
-	// a scale out/in action is triggered by periodically reconciliation (building inventory and deciding on the replicas)
+	// a scale out/in action is triggered by periodic reconciliation (building inventory and deciding on the replicas)
 	return reconcile.Result{RequeueAfter: r.pollInterval}, nil
-}
-
-func (r *Reconciler) getServices(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
-	services := make([]string, 0, len(ctrlMetaCfg.Spec.Pods)+1)
-	for _, pod := range ctrlMetaCfg.Spec.Pods {
-		services = append(services, strings.Join([]string{ctrlMetaCfg.Name, pod.Name}, "-"))
-		break
-	}
-	services = append(services, strings.Join([]string{ctrlMetaCfg.Name, "target"}, "-"))
-	return services
 }
