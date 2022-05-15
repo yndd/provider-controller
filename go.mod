@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/cert-manager/cert-manager v1.8.0
+	github.com/hashicorp/consul/api v1.12.0
 	github.com/pkg/errors v0.9.1
 	github.com/yndd/ndd-core v0.2.16
 	github.com/yndd/ndd-runtime v0.5.8
@@ -75,7 +76,6 @@ require (
 	github.com/gosimple/unidecode v1.0.0 // indirect
 	github.com/hairyhenderson/gomplate/v3 v3.10.0 // indirect
 	github.com/hairyhenderson/toml v0.4.2-0.20210923231440-40456b8e66cf // indirect
-	github.com/hashicorp/consul/api v1.12.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v0.16.2 // indirect
