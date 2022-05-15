@@ -106,12 +106,16 @@ var startCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		zlog.Info("serviceDiscoveryNamespace", "serviceDiscoveryNamespace", serviceDiscoveryNamespace)
-		reg := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
+		reg, err := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
 			registrator.WithClient(resource.ClientApplicator{
 				Client:     client,
 				Applicator: resource.NewAPIPatchingApplicator(client),
 			}),
 			registrator.WithLogger(logger))
+
+		if err != nil {
+			return errors.Wrap(err, "Cannot initialize registrator")
+		}
 
 		nddcopts := &shared.NddControllerOptions{
 			Logger:            logger,
