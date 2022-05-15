@@ -288,7 +288,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			}
 		}
 	}
-	return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
+	return reconcile.Result{}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
 }
 
 func (r *Reconciler) addWatcher(nsName string, ctrlMetaCfg *pkgmetav1.ControllerConfig) {

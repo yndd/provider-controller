@@ -211,7 +211,7 @@ func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("NameSpaceName", req.NamespacedName)
-	log.Debug("Target reconciler start...")
+	log.Debug("lcm reconciler start...")
 
 	// get the controller config info
 	ctrlMetaCfg := &pkgmetav1.ControllerConfig{}
