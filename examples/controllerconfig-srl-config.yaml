@@ -17,6 +17,11 @@ spec:
         name: controller
       extras:
       - certificate: true
+        name: grpc
+        port: 9999
+        service: true
+        target-port: 9999
+      - certificate: true
         name: webhook
         port: 443
         service: true
@@ -43,7 +48,7 @@ spec:
         resources: {}
       extras:
       - certificate: true
-        name: gnmi
+        name: grpc
         port: 9999
         service: true
         target-port: 9999

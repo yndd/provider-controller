@@ -29,7 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision) *appsv1.StatefulSet {
+func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision, grpcServiceName string) *appsv1.StatefulSet {
 	s := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),
@@ -51,7 +51,7 @@ func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav
 					SecurityContext:    getPodSecurityContext(),
 					ServiceAccountName: renderServiceAccount(ctrlMetaCfg, podSpec, revision).GetName(),
 					ImagePullSecrets:   revision.GetPackagePullSecrets(),
-					Containers:         getContainers(ctrlMetaCfg, podSpec, revision.GetPackagePullPolicy()),
+					Containers:         getContainers(ctrlMetaCfg, podSpec, revision.GetPackagePullPolicy(), grpcServiceName),
 					Volumes:            getVolumes(ctrlMetaCfg, podSpec),
 				},
 			},
@@ -89,7 +89,7 @@ func getSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-func getEnv() []corev1.EnvVar {
+func getEnv(grpcServiceName string) []corev1.EnvVar {
 	// environment parameters used in the deployment/statefulset
 	envNameSpace := corev1.EnvVar{
 		Name: "POD_NAMESPACE",
@@ -136,6 +136,10 @@ func getEnv() []corev1.EnvVar {
 			},
 		},
 	}
+	envGRPCSvc := corev1.EnvVar{
+		Name: "GRPC_SVC_NAME",
+		Value: grpcServiceName,
+	}
 
 	return []corev1.EnvVar{
 		envNameSpace,
@@ -143,17 +147,18 @@ func getEnv() []corev1.EnvVar {
 		envPodName,
 		envNodeName,
 		envNodeIP,
+		envGRPCSvc,
 	}
 }
 
-func getContainers(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, pullPolicy *corev1.PullPolicy) []corev1.Container {
+func getContainers(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, pullPolicy *corev1.PullPolicy, grpcServiceName string) []corev1.Container {
 	containers := []corev1.Container{}
 
 	for _, container := range podSpec.Containers {
 		if container.Container.Name == "kube-rbac-proxy" {
 			containers = append(containers, getKubeProxyContainer())
 		} else {
-			containers = append(containers, getContainer(ctrlMetaCfg, container, pullPolicy))
+			containers = append(containers, getContainer(ctrlMetaCfg, container, pullPolicy, grpcServiceName))
 		}
 	}
 
@@ -244,14 +249,14 @@ func getVolumes(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSp
 	return volume
 }
 
-func getContainer(ctrlMetaCfg *pkgmetav1.ControllerConfig, c pkgmetav1.ContainerSpec, pullPolicy *corev1.PullPolicy) corev1.Container {
+func getContainer(ctrlMetaCfg *pkgmetav1.ControllerConfig, c pkgmetav1.ContainerSpec, pullPolicy *corev1.PullPolicy, grpcServiceName string) corev1.Container {
 	return corev1.Container{
 		Name:            c.Container.Name,
 		Image:           c.Container.Image,
 		ImagePullPolicy: *pullPolicy,
 		SecurityContext: getSecurityContext(),
 		Args:            getArgs(ctrlMetaCfg),
-		Env:             getEnv(),
+		Env:             getEnv(grpcServiceName),
 		Command: []string{
 			containerStartupCmd,
 		},
