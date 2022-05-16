@@ -20,10 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-<<<<<<< HEAD
-=======
 	"sync"
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 	"time"
 
 	"github.com/openconfig/ygot/ygot"
@@ -36,15 +33,11 @@ import (
 	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/ndd-target-runtime/pkg/ygotnddtarget"
-<<<<<<< HEAD
-	"github.com/yndd/registrator/registrator"
-	ctrl "sigs.k8s.io/controller-runtime"
-=======
+	"github.com/yndd/provider-controller/pkg/inventory"
 	"github.com/yndd/provider-controller/pkg/watcher"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
 	cevent "sigs.k8s.io/controller-runtime/pkg/event"
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
@@ -87,17 +80,13 @@ type Reconciler struct {
 	finalizer resource.Finalizer
 	// servicediscovery registrator
 	registrator  registrator.Registrator
-<<<<<<< HEAD
-	pollInterval time.Duration
-
-=======
 	watcher      watcher.Watcher
+	inventory    inventory.Inventory
 	pollInterval time.Duration
 
 	m        sync.Mutex
 	watchers map[string]context.CancelFunc
 
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 	newTarget func() targetv1.Tg
 	//newProviderRevision func() pkgv1.PackageRevision
 	log    logging.Logger
@@ -137,10 +126,6 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 	name := "config-controller/" + strings.ToLower(targetv1.TargetGroupKind)
 	tgl := func() targetv1.TgList { return &targetv1.TargetList{} }
 
-<<<<<<< HEAD
-	r := NewReconciler(mgr,
-		WithRegistrator(nddopts.Registrator),
-=======
 	events := make(chan cevent.GenericEvent)
 
 	r := NewReconciler(mgr,
@@ -152,7 +137,6 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 			//	Applicator: resource.NewAPIPatchingApplicator(mgr.GetClient()),
 			//}),
 			watcher.WithLogger(nddopts.Logger))),
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
@@ -192,7 +176,7 @@ func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 	for _, f := range opts {
 		f(r)
 	}
-
+	r.inventory = inventory.New(m.GetClient(), r.registrator)
 	return r
 }
 
@@ -238,12 +222,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{RequeueAfter: shortWait}, nil
 	}
 
-	// build inventory interface
-	// -> per worker and reconciler we identify the targets for each and will be able to select
-
 	// per service validate the allocation
 	for _, serviceInfo := range ctrlMetaCfg.GetServicesInfo() {
-		log.WithValues("serviceName", serviceInfo.ServiceName)
+		log = log.WithValues("serviceName", serviceInfo.ServiceName)
 		// initialize allocation map if it is not initialized
 		if tspec.Allocation == nil {
 			tspec.Allocation = map[string]*ygotnddtarget.NddTarget_TargetEntry_Allocation{}
@@ -254,11 +235,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		if !ok {
 			// service is not allocated
 			log.Debug("service is not allocated")
-			// check least fill
+			assigned := r.inventory.GetLeastFill(ctx, ctrlMetaCfg, serviceInfo.ServiceName)
+			if assigned == "" {
+				return reconcile.Result{}, fmt.Errorf("could not assign an instance for service %q", serviceInfo.ServiceName)
+			}
 			// allocate the serviceInstance
 			serviceInstance := &ygotnddtarget.NddTarget_TargetEntry_Allocation{
 				ServiceName:     ygot.String(serviceInfo.ServiceName),
-				ServiceIdentity: ygot.String("todo"),
+				ServiceIdentity: ygot.String(assigned),
 			}
 			log.Debug("service allocated", "serviceInstance", serviceInstance)
 			tspec.AppendAllocation(serviceInstance)
@@ -285,7 +269,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 				tspec.DeleteAllocation(serviceInfo.ServiceName)
 			}
 
-			// When the
+			// When the service is found
 			if serviceInfo.Kind == pkgmetav1.KindWorker {
 				targetServiceInfo := ctrlMetaCfg.GetTargetServiceInfo()
 
@@ -306,10 +290,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			}
 		}
 	}
-<<<<<<< HEAD
-	return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
-=======
-	return reconcile.Result{}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
+	return reconcile.Result{
+		Requeue:      true,
+		RequeueAfter: time.Minute,
+	}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
 }
 
 func (r *Reconciler) addWatcher(nsName string, ctrlMetaCfg *pkgmetav1.ControllerConfig) {
@@ -329,5 +313,4 @@ func (r *Reconciler) deleteWatcher(nsName string) {
 	if ok {
 		cfn()
 	}
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 }

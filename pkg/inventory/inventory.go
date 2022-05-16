@@ -2,36 +2,63 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
-	"github.com/hashicorp/consul/api"
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
+	"github.com/yndd/registrator/registrator"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type Option func(Inventory)
 type Inventory interface {
-	Build(ctx context.Context, cc *pkgmetav1.ControllerConfig, consul bool) (map[string]map[string][]string, error)
+	Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
+	BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
+	GetLeastFill(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string
 }
 
 type InvImpl struct {
 	kClient client.Client
-	cClient api.Client
+	reg     registrator.Registrator
 }
 
-func New() Inventory {
-	return &InvImpl{}
-}
-
-func (i *InvImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig, consul bool) (map[string]map[string][]string, error) {
-	if consul {
-		return i.inventoryFromConsul(ctx, cc)
+func New(k client.Client, reg registrator.Registrator) Inventory {
+	return &InvImpl{
+		kClient: k,
+		reg:     reg,
 	}
+}
+
+func (i *InvImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	targets, err := i.getTargets(ctx, "") // TODO: add namespace to controllerConfig spec and use it here
 	if err != nil {
 		return nil, err
 	}
 	return i.inventoryFromTargets(targets)
+}
+
+func (i *InvImpl) BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+	return i.inventoryFromRegistry(ctx, cc)
+}
+
+func (i *InvImpl) GetLeastFill(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string {
+	for _, pod := range cc.Spec.Pods {
+		if serviceName == fmt.Sprintf("%s-%s", cc.Name, pod.Name) {
+			inv, err := i.Build(ctx, cc)
+			if err != nil {
+				return ""
+			}
+			return findLeastLoaded(inv, serviceName)
+		}
+	}
+	// inventory from registrator
+	inv, err := i.BuildFromRegistry(ctx, cc)
+	if err != nil {
+		return ""
+	}
+	return findLeastLoaded(inv, serviceName)
 }
 
 func (i *InvImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target, error) {
@@ -69,25 +96,25 @@ func (i *InvImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]ma
 	return inv, nil
 }
 
-func (i *InvImpl) inventoryFromConsul(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *InvImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	inv := make(map[string]map[string][]string)
 	for _, serv := range cc.GetServicesInfoByKind(pkgmetav1.KindNone) { // kind none is targets
-		consulServiceEntries, _, err := i.cClient.Health().ServiceMultipleTags(serv.ServiceName, []string{}, true, &api.QueryOptions{})
+		services, err := i.reg.Query(ctx, serv.ServiceName, []string{})
 		if err != nil {
 			return nil, err
 		}
-		for _, srvEntry := range consulServiceEntries {
-			if inv[srvEntry.Service.Service] == nil {
-				inv[srvEntry.Service.Service] = make(map[string][]string)
+		for _, srvEntry := range services {
+			if inv[srvEntry.Name] == nil {
+				inv[srvEntry.Name] = make(map[string][]string)
 			}
-			if inv[srvEntry.Service.Service][srvEntry.Service.ID] == nil {
-				inv[srvEntry.Service.Service][srvEntry.Service.ID] = make([]string, 0)
+			if inv[srvEntry.Name][srvEntry.ID] == nil {
+				inv[srvEntry.Name][srvEntry.ID] = make([]string, 0)
 			}
 
-			for _, tag := range srvEntry.Service.Tags {
+			for _, tag := range srvEntry.Tags {
 				if strings.HasPrefix(tag, "target=") {
-					inv[srvEntry.Service.Service][srvEntry.Service.ID] = append(
-						inv[srvEntry.Service.Service][srvEntry.Service.ID],
+					inv[srvEntry.Name][srvEntry.ID] = append(
+						inv[srvEntry.Name][srvEntry.ID],
 						strings.TrimPrefix(tag, "target="))
 				}
 			}
@@ -95,4 +122,22 @@ func (i *InvImpl) inventoryFromConsul(ctx context.Context, cc *pkgmetav1.Control
 	}
 
 	return inv, nil
+}
+
+func findLeastLoaded(inv map[string]map[string][]string, name string) string {
+	leastLoaded := ""
+	if srv, ok := inv[name]; ok {
+		var minTargets *int
+		for instance, targets := range srv {
+			if minTargets == nil {
+				minTargets = pointer.Int(len(targets))
+				leastLoaded = instance
+				continue
+			}
+			if len(targets) <= *minTargets {
+				leastLoaded = instance
+			}
+		}
+	}
+	return leastLoaded
 }
