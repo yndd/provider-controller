@@ -137,7 +137,7 @@ func getEnv(grpcServiceName string) []corev1.EnvVar {
 		},
 	}
 	envGRPCSvc := corev1.EnvVar{
-		Name: "GRPC_SVC_NAME",
+		Name:  "GRPC_SVC_NAME",
 		Value: grpcServiceName,
 	}
 
