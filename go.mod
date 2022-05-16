@@ -8,7 +8,11 @@ require (
 	github.com/yndd/ndd-core v0.2.16
 	github.com/yndd/ndd-runtime v0.5.8
 	github.com/yndd/ndd-target-runtime v0.0.41
+<<<<<<< HEAD
 	github.com/yndd/registrator v0.0.7
+=======
+	github.com/yndd/registrator v0.0.10
+>>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 	k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver v0.23.5
 	k8s.io/apimachinery v0.24.0

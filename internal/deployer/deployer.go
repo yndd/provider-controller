@@ -120,6 +120,7 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 		return err
 	}
 
+	var grpcServiceName string
 	for _, podSpec := range ctrlMetaCfg.Spec.Pods {
 		for _, c := range podSpec.Containers {
 			for _, cr := range renderClusterRoles(ctrlMetaCfg, podSpec, c, pr, crds) {
@@ -151,6 +152,12 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 					if err := d.client.Apply(ctx, s); err != nil {
 						return errors.Wrap(err, errApplyService)
 					}
+<<<<<<< HEAD
+=======
+					if extra.Name == "grpc" {
+						grpcServiceName = s.Name
+					}
+>>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 				}
 				if extra.Webhook {
 					// deploy a mutating webhook
@@ -169,7 +176,11 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 		switch podSpec.Type {
 		case pkgmetav1.DeploymentTypeDeployment:
 		case pkgmetav1.DeploymentTypeStatefulset:
+<<<<<<< HEAD
 			s := renderStatefulSet(ctrlMetaCfg, podSpec, pr)
+=======
+			s := renderStatefulSet(ctrlMetaCfg, podSpec, pr, grpcServiceName)
+>>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 			if err := d.client.Apply(ctx, s); err != nil {
 				return errors.Wrap(err, errApplyStatfullSet)
 			}

@@ -97,21 +97,26 @@ var startCmd = &cobra.Command{
 			return errors.Wrap(err, "Cannot create manager")
 		}
 
-		// get k8s client
+		// get k8s client direct to the api server, since the mgr client
+		// is not yet initialized
 		client, err := getClient(scheme)
 		if err != nil {
 			return err
 		}
 
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(cmd.Context())
 		defer cancel()
 		zlog.Info("serviceDiscoveryNamespace", "serviceDiscoveryNamespace", serviceDiscoveryNamespace)
-		reg := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
+		reg, err := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
 			registrator.WithClient(resource.ClientApplicator{
 				Client:     client,
 				Applicator: resource.NewAPIPatchingApplicator(client),
 			}),
 			registrator.WithLogger(logger))
+
+		if err != nil {
+			return errors.Wrap(err, "Cannot initialize registrator")
+		}
 
 		nddcopts := &shared.NddControllerOptions{
 			Logger:            logger,

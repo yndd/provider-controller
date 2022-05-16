@@ -1,0 +1,64 @@
+apiVersion: meta.pkg.ndd.yndd.io/v1
+kind: ControllerConfig
+metadata:
+  name: ndd-config-srl
+  namespace: ndd-system
+spec:
+  vendor_type: nokia-srl
+  service-discovery: consul
+  service-discovery-namespace: consul
+  pods:
+  - containers:
+    - container:
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+        name: kube-rbac-proxy
+    - container:
+        image: yndd/ndd-config-srl-provider:latest
+        name: controller
+      extras:
+      - certificate: true
+        name: grpc
+        port: 9999
+        service: true
+        target-port: 9999
+      - certificate: true
+        name: webhook
+        port: 443
+        service: true
+        target-port: 9443
+        webhook: true
+      - name: metrics
+        port: 8443
+        service: true
+        target-port: 443
+      - name: profiler
+        volume: true
+    name: reconciler
+    replicas: 1
+    kind: reconciler
+    type: statefulset
+  - containers:
+    - container:
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+        name: kube-rbac-proxy
+        resources: {}
+    - container:
+        image: yndd/ndd-config-srl-worker:latest
+        name: controller
+        resources: {}
+      extras:
+      - certificate: true
+        name: grpc
+        port: 9999
+        service: true
+        target-port: 9999
+      - name: metrics
+        port: 8443
+        service: true
+        target-port: 443
+      - name: profiler
+        volume: true
+    name: worker
+    replicas: 1
+    type: statefulset
+    kind: worker
