@@ -235,7 +235,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		if !ok {
 			// service is not allocated
 			log.Debug("service is not allocated")
-			assigned := r.inventory.GetLeastFill(ctx, ctrlMetaCfg, serviceInfo.ServiceName)
+			assigned := r.inventory.GetLeastLoaded(ctx, ctrlMetaCfg, serviceInfo.ServiceName)
 			if assigned == "" {
 				return reconcile.Result{}, fmt.Errorf("could not assign an instance for service %q", serviceInfo.ServiceName)
 			}

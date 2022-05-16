@@ -14,24 +14,29 @@ import (
 
 type Option func(Inventory)
 type Inventory interface {
+	// Build builds a map of service --> serviceInstance --> []targets based on
+	// the assignments in the target spec
 	Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
+	// BuildFromRegistry builds the same map as Build based on the target
+	// registrations in the registrator
 	BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
-	GetLeastFill(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string
+	// GetLeastLoaded returns the least loaded instance of service serviceName
+	GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string
 }
 
-type InvImpl struct {
+type invImpl struct {
 	kClient client.Client
 	reg     registrator.Registrator
 }
 
 func New(k client.Client, reg registrator.Registrator) Inventory {
-	return &InvImpl{
+	return &invImpl{
 		kClient: k,
 		reg:     reg,
 	}
 }
 
-func (i *InvImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	targets, err := i.getTargets(ctx, "") // TODO: add namespace to controllerConfig spec and use it here
 	if err != nil {
 		return nil, err
@@ -39,19 +44,20 @@ func (i *InvImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (ma
 	return i.inventoryFromTargets(targets)
 }
 
-func (i *InvImpl) BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	return i.inventoryFromRegistry(ctx, cc)
 }
 
-func (i *InvImpl) GetLeastFill(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string {
+func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string {
 	for _, pod := range cc.Spec.Pods {
-		if serviceName == fmt.Sprintf("%s-%s", cc.Name, pod.Name) {
-			inv, err := i.Build(ctx, cc)
-			if err != nil {
-				return ""
-			}
-			return findLeastLoaded(inv, serviceName)
+		if serviceName != fmt.Sprintf("%s-%s", cc.Name, pod.Name) {
+			continue
 		}
+		inv, err := i.Build(ctx, cc)
+		if err != nil {
+			return ""
+		}
+		return findLeastLoaded(inv, serviceName)
 	}
 	// inventory from registrator
 	inv, err := i.BuildFromRegistry(ctx, cc)
@@ -61,7 +67,7 @@ func (i *InvImpl) GetLeastFill(ctx context.Context, cc *pkgmetav1.ControllerConf
 	return findLeastLoaded(inv, serviceName)
 }
 
-func (i *InvImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target, error) {
+func (i *invImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target, error) {
 	targets := &targetv1.TargetList{}
 	err := i.kClient.List(ctx, targets, &client.ListOptions{
 		Namespace: ns,
@@ -69,7 +75,7 @@ func (i *InvImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target,
 	return targets.Items, err
 }
 
-func (i *InvImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]map[string][]string, error) {
+func (i *invImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]map[string][]string, error) {
 	// allocation -> serviceID -> []targets
 	inv := make(map[string]map[string][]string)
 	numTargets := len(targets)
@@ -96,7 +102,7 @@ func (i *InvImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]ma
 	return inv, nil
 }
 
-func (i *InvImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	inv := make(map[string]map[string][]string)
 	for _, serv := range cc.GetServicesInfoByKind(pkgmetav1.KindNone) { // kind none is targets
 		services, err := i.reg.Query(ctx, serv.ServiceName, []string{})
@@ -134,7 +140,9 @@ func findLeastLoaded(inv map[string]map[string][]string, name string) string {
 				leastLoaded = instance
 				continue
 			}
-			if len(targets) <= *minTargets {
+			numTargets := len(targets)
+			if numTargets <= *minTargets {
+				minTargets = pointer.Int(numTargets)
 				leastLoaded = instance
 			}
 		}
