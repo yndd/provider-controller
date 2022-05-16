@@ -98,15 +98,10 @@ START:
 
 	ch := make(chan *registrator.ServiceResponse)
 	for _, pod := range ctrlMetaCfg.Spec.Pods {
-<<<<<<< HEAD
-		for _, serviceInfo := range ctrlMetaCfg.GetServicesInfoByKind(pod.Kind) {
-			go r.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
-=======
 		w.log.Debug("podInfo", "pod", pod)
 		for _, serviceInfo := range ctrlMetaCfg.GetServicesInfoByKind(pod.Kind) {
 			w.log.Debug("serviceInfo", "serviceInfo", serviceInfo)
 			go w.registrator.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 		}
 	}
 

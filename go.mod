@@ -4,19 +4,17 @@ go 1.17
 
 require (
 	github.com/cert-manager/cert-manager v1.8.0
+	github.com/hashicorp/consul/api v1.12.0
 	github.com/pkg/errors v0.9.1
 	github.com/yndd/ndd-core v0.2.16
 	github.com/yndd/ndd-runtime v0.5.8
 	github.com/yndd/ndd-target-runtime v0.0.41
-<<<<<<< HEAD
-	github.com/yndd/registrator v0.0.7
-=======
 	github.com/yndd/registrator v0.0.10
->>>>>>> 9a18e89119ebe70fdc77116a851fa26251fe04d8
 	k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver v0.23.5
 	k8s.io/apimachinery v0.24.0
 	k8s.io/client-go v0.24.0
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.11.2
 )
 
@@ -79,7 +77,6 @@ require (
 	github.com/gosimple/unidecode v1.0.0 // indirect
 	github.com/hairyhenderson/gomplate/v3 v3.10.0 // indirect
 	github.com/hairyhenderson/toml v0.4.2-0.20210923231440-40456b8e66cf // indirect
-	github.com/hashicorp/consul/api v1.12.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-hclog v0.16.2 // indirect
@@ -163,7 +160,6 @@ require (
 	k8s.io/component-base v0.24.0 // indirect
 	k8s.io/klog/v2 v2.60.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 // indirect
-	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9 // indirect
 	sigs.k8s.io/gateway-api v0.4.1 // indirect
 	sigs.k8s.io/json v0.0.0-20211208200746-9f7c6b3444d2 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect

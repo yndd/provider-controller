@@ -31,6 +31,7 @@ import (
 	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/provider-controller/internal/deployer"
+	"github.com/yndd/provider-controller/pkg/inventory"
 	"github.com/yndd/provider-controller/pkg/watcher"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,6 +77,7 @@ type Reconciler struct {
 	// servicediscovery registrator
 	registrator registrator.Registrator
 	watcher     watcher.Watcher
+	inventory   inventory.Inventory
 	deployer    deployer.Deployer
 
 	m             sync.Mutex
@@ -206,6 +208,7 @@ func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 		deployer.WithRevision(r.revision, r.revisionNamespace),
 	)
 
+	r.inventory = inventory.New(m.GetClient(), r.registrator)
 	return r
 }
 
