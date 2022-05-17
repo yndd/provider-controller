@@ -2,7 +2,6 @@ package inventory
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
@@ -50,7 +49,7 @@ func (i *invImpl) BuildFromRegistry(ctx context.Context, cc *pkgmetav1.Controlle
 
 func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string {
 	for _, pod := range cc.Spec.Pods {
-		if serviceName != fmt.Sprintf("%s-%s", cc.Name, pod.Name) {
+		if serviceName != pkgmetav1.GetServiceName(cc.Name, pod.Name) {
 			continue
 		}
 		inv, err := i.Build(ctx, cc)
@@ -59,12 +58,7 @@ func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerCo
 		}
 		return findLeastLoaded(inv, serviceName)
 	}
-	// inventory from registrator
-	inv, err := i.BuildFromRegistry(ctx, cc)
-	if err != nil {
-		return ""
-	}
-	return findLeastLoaded(inv, serviceName)
+	return ""
 }
 
 func (i *invImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target, error) {
@@ -104,25 +98,24 @@ func (i *invImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]ma
 
 func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
 	inv := make(map[string]map[string][]string)
-	for _, serv := range cc.GetServicesInfoByKind(pkgmetav1.KindNone) { // kind none is targets
-		services, err := i.reg.Query(ctx, serv.ServiceName, []string{})
-		if err != nil {
-			return nil, err
+	serv := cc.GetTargetServiceInfo()
+	services, err := i.reg.Query(ctx, serv.ServiceName, []string{})
+	if err != nil {
+		return nil, err
+	}
+	for _, srvEntry := range services {
+		if inv[srvEntry.Name] == nil {
+			inv[srvEntry.Name] = make(map[string][]string)
 		}
-		for _, srvEntry := range services {
-			if inv[srvEntry.Name] == nil {
-				inv[srvEntry.Name] = make(map[string][]string)
-			}
-			if inv[srvEntry.Name][srvEntry.ID] == nil {
-				inv[srvEntry.Name][srvEntry.ID] = make([]string, 0)
-			}
+		if inv[srvEntry.Name][srvEntry.ID] == nil {
+			inv[srvEntry.Name][srvEntry.ID] = make([]string, 0)
+		}
 
-			for _, tag := range srvEntry.Tags {
-				if strings.HasPrefix(tag, "target=") {
-					inv[srvEntry.Name][srvEntry.ID] = append(
-						inv[srvEntry.Name][srvEntry.ID],
-						strings.TrimPrefix(tag, "target="))
-				}
+		for _, tag := range srvEntry.Tags {
+			if strings.HasPrefix(tag, "target=") {
+				inv[srvEntry.Name][srvEntry.ID] = append(
+					inv[srvEntry.Name][srvEntry.ID],
+					strings.TrimPrefix(tag, "target="))
 			}
 		}
 	}
