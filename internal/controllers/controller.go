@@ -19,20 +19,20 @@ package controllers
 import (
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
 	"github.com/yndd/provider-controller/internal/controllers/alloccontroller"
+	controllerc "github.com/yndd/provider-controller/internal/controllers/controller"
 	"github.com/yndd/provider-controller/internal/controllers/lcmcontroller"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 // Setup controllers.
 func Setup(mgr ctrl.Manager, nddcopts *shared.NddControllerOptions) error {
-
-	for _, setup := range []func(ctrl.Manager, *shared.NddControllerOptions) error{
-		lcmcontroller.Setup,
-		alloccontroller.Setup,
-	} {
-		if err := setup(mgr, nddcopts); err != nil {
-			return err
-		}
+	lcmCh, err := lcmcontroller.Setup(mgr, nddcopts)
+	if err != nil {
+		return err
 	}
-	return nil
+	allcCh, err := alloccontroller.Setup(mgr, nddcopts)
+	if err != nil {
+		return err
+	}
+	return controllerc.Setup(mgr, nddcopts, lcmCh, allcCh)
 }

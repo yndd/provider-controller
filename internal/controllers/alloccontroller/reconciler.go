@@ -122,22 +122,14 @@ func WithWatcher(w watcher.Watcher) ReconcilerOption {
 }
 
 // SetupProvider adds a controller that reconciles Providers.
-func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
+func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.GenericEvent, error) {
 	name := "config-controller/" + strings.ToLower(targetv1.TargetGroupKind)
 	tgl := func() targetv1.TgList { return &targetv1.TargetList{} }
 
-	events := make(chan cevent.GenericEvent)
+	e := make(chan cevent.GenericEvent)
 
 	r := NewReconciler(mgr,
 		WithRegistrator(nddopts.Registrator),
-		WithWatcher(watcher.New(events,
-			watcher.WithRegistrator(nddopts.Registrator),
-			//watcher.WithClient(resource.ClientApplicator{
-			//	Client:     mgr.GetClient(),
-			//	Applicator: resource.NewAPIPatchingApplicator(mgr.GetClient()),
-			//}),
-			watcher.WithLogger(nddopts.Logger))),
-		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
@@ -148,12 +140,13 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) error {
 		newTargetList: tgl,
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	return e, ctrl.NewControllerManagedBy(mgr).
 		WithOptions(nddopts.Copts).
 		Named(name).
 		For(&targetv1.Target{}).
 		WithEventFilter(resource.IgnoreUpdateWithoutGenerationChangePredicate()).
 		Watches(&source.Kind{Type: &pkgmetav1.ControllerConfig{}}, ControllerConfigHandler).
+		Watches(&source.Channel{Source: e}, ControllerConfigHandler).
 		Complete(r)
 }
 

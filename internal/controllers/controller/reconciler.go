@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package lcmcontroller
+package controller
 
 import (
 	"context"
@@ -24,19 +24,17 @@ import (
 
 	"github.com/pkg/errors"
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
-	"github.com/yndd/ndd-runtime/pkg/event"
+	"github.com/yndd/provider-controller/pkg/watcher"
+	"github.com/yndd/registrator/registrator"
+
+	nddevent "github.com/yndd/ndd-runtime/pkg/event"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/meta"
-	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
 	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
-	"github.com/yndd/provider-controller/internal/deployer"
-	"github.com/yndd/provider-controller/pkg/inventory"
-	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
-	cevent "sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -61,10 +59,6 @@ const (
 	errApplyClusterRoles       = "cannot apply clusterrole"
 	errApplyClusterRoleBinding = "cannot apply clusterrolebinding"
 	errApplyServiceAccount     = "cannot apply service account"
-	//event
-	reasonCreatedStatefullSet event.Reason = "CreatedStatefullSet"
-	reasonAllocatedPod        event.Reason = "AllocatedPod"
-	reasonMaxReplicasReached  event.Reason = "MaxReplicasReached"
 )
 
 // ReconcilerOption is used to configure the Reconciler.
@@ -72,40 +66,19 @@ type ReconcilerOption func(*Reconciler)
 
 // Reconciler reconciles packages.
 type Reconciler struct {
-	client    resource.ClientApplicator
-	finalizer resource.Finalizer
-	// servicediscovery registrator
+	client      resource.ClientApplicator
+	finalizer   resource.Finalizer
+	m           *sync.Mutex
+	watchers    map[string]context.CancelFunc
 	registrator registrator.Registrator
-	inventory   inventory.Inventory
-	deployer    deployer.Deployer
 
-	m             sync.Mutex
-	watchers      map[string]context.CancelFunc
-	newTargetList func() targetv1.TgList
+	allocGenericEventCh chan event.GenericEvent
+	lcmGenericEventCh   chan event.GenericEvent
 
-	crdNames          []string
-	revision          string
-	revisionNamespace string
-	pollInterval      time.Duration
+	pollInterval time.Duration
 
-	//newProviderRevision func() pkgv1.PackageRevision
 	log    logging.Logger
-	record event.Recorder
-}
-
-// WithCrdNames specifies the crdNames in the reconciler
-func WithCrdNames(n []string) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.crdNames = n
-	}
-}
-
-// WithRevision specifies the revision
-func WithRevision(name, namespace string) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.revision = name
-		r.revisionNamespace = namespace
-	}
+	record nddevent.Recorder
 }
 
 // WithLogger specifies how the Reconciler logs messages.
@@ -116,7 +89,7 @@ func WithLogger(l logging.Logger) ReconcilerOption {
 }
 
 // WithRecorder specifies how the Reconciler records events.
-func WithRecorder(er event.Recorder) ReconcilerOption {
+func WithRecorder(er nddevent.Recorder) ReconcilerOption {
 	return func(r *Reconciler) {
 		r.record = er
 	}
@@ -129,75 +102,63 @@ func WithRegistrator(reg registrator.Registrator) ReconcilerOption {
 	}
 }
 
+func WithAllocGenericEventChs(geCh chan event.GenericEvent) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.allocGenericEventCh = geCh
+	}
+}
+
+func WithLCMGenericEventChs(geCh chan event.GenericEvent) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.lcmGenericEventCh = geCh
+	}
+}
+
 // SetupProvider adds a controller that reconciles Providers.
-func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.GenericEvent, error) {
+func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions, lcmCh, allocCh chan event.GenericEvent) error {
 	name := "config-controller/" + strings.ToLower(pkgmetav1.ControllerConfigGroupKind)
 
-	e := make(chan cevent.GenericEvent)
-
 	r := NewReconciler(mgr,
-		WithRegistrator(nddopts.Registrator),
-		WithRevision(nddopts.Revision, nddopts.RevisionNamespace),
-		WithCrdNames(nddopts.CrdNames),
 		WithLogger(nddopts.Logger),
-		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+		WithRecorder(nddevent.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+		WithRegistrator(nddopts.Registrator),
+		WithLCMGenericEventChs(lcmCh),
+		WithAllocGenericEventChs(allocCh),
 	)
 
-	ControllerConfigHandler := &EnqueueRequestForAllControllerConfig{
-		client: mgr.GetClient(),
-		log:    nddopts.Logger,
-		ctx:    context.Background(),
-	}
-
-	return e, ctrl.NewControllerManagedBy(mgr).
+	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(nddopts.Copts).
 		Named(name).
 		For(&pkgmetav1.ControllerConfig{}).
 		Owns(&pkgmetav1.ControllerConfig{}).
-		WithEventFilter(resource.IgnoreUpdateWithoutGenerationChangePredicate()).
-		Watches(&source.Channel{Source: e}, ControllerConfigHandler).
 		Complete(r)
 }
 
 // NewReconciler creates a new package reconciler.
 func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
-	tgl := func() targetv1.TgList { return &targetv1.TargetList{} }
-
 	r := &Reconciler{
 		client: resource.ClientApplicator{
 			Client:     m.GetClient(),
 			Applicator: resource.NewAPIPatchingApplicator(m.GetClient()),
 		},
-		watchers:      make(map[string]context.CancelFunc),
-		newTargetList: tgl,
-		pollInterval:  defaultpollInterval,
-		log:           logging.NewNopLogger(),
-		record:        event.NewNopRecorder(),
-		finalizer:     resource.NewAPIFinalizer(m.GetClient(), finalizerName),
+		m:            new(sync.Mutex),
+		watchers:     make(map[string]context.CancelFunc),
+		pollInterval: defaultpollInterval,
+		log:          logging.NewNopLogger(),
+		record:       nddevent.NewNopRecorder(),
+		finalizer:    resource.NewAPIFinalizer(m.GetClient(), finalizerName),
 	}
 
 	for _, f := range opts {
 		f(r)
 	}
 
-	r.deployer = deployer.New(
-		deployer.WithClient(
-			resource.ClientApplicator{
-				Client:     m.GetClient(),
-				Applicator: resource.NewAPIPatchingApplicator(m.GetClient()),
-			},
-		),
-		deployer.WithLogger(r.log),
-		deployer.WithRevision(r.revision, r.revisionNamespace),
-	)
-
-	r.inventory = inventory.New(m.GetClient(), r.registrator)
 	return r
 }
 
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) { // nolint:gocyclo
 	log := r.log.WithValues("NameSpaceName", req.NamespacedName)
-	log.Debug("lcm reconciler start...")
+	log.Debug("controller reconciler start...")
 
 	// get the controller config info
 	cc := &pkgmetav1.ControllerConfig{}
@@ -208,14 +169,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetControllerConfig)
 	}
 
-	record := r.record.WithAnnotations("external-name", meta.GetExternalName(cc))
+	// record := r.record.WithAnnotations("external-name", meta.GetExternalName(cc))
 
 	if meta.WasDeleted(cc) {
-		// Delete the watcher
-		// r.deleteWatcher(req.NamespacedName.String())
+		// Stop watcher
+		r.deleteWatcher(req.NamespacedName.String())
 		// Delete finalizer after the object is deleted
 		if err := r.finalizer.RemoveFinalizer(ctx, cc); err != nil {
-			log.Debug("Cannot remove target cr finalizer", "error", err)
+			log.Debug("Cannot remove controller config finalizer", "error", err)
 			return reconcile.Result{Requeue: true}, errors.Wrap(err, "cannot remove finalizer")
 		}
 		return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Update(ctx, cc), "cannot remove finalizer")
@@ -227,32 +188,40 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cc), "cannot add finalizer")
 	}
 
+	// TODO: add diff logic to decide when to delete/create the watcher
+	// required only when when pod names/kind change in controllerConfig
+
+	// stop watchers
+	r.deleteWatcher(req.NamespacedName.String())
+	// start watchers
+	r.addWatcher(req.NamespacedName.String(), cc)
+	// trigger generic event to LCM controller
+	r.lcmGenericEventCh <- event.GenericEvent{Object: cc}
 	log.Debug("ctrlMetaCfg", "ctrlMetaCfg spec", cc.Spec)
-	// r.addWatcher(req.NamespacedName.String(), cc)
 
-	for _, pod := range cc.Spec.Pods {
-		srvName := pkgmetav1.GetServiceName(cc.Name, pod.Name)
-		if !r.inventory.ISFull(ctx, cc, srvName) {
-			continue
-		}
-		// scale out
-		if pod.Replicas < pod.MaxReplicas {
-			pod.Replicas++
-			continue
-		}
-		log.Info("service already at max replicas", "service", srvName)
-		record.Event(cc, event.Warning(reasonMaxReplicasReached, nil, "service-name", srvName))
-	}
-
-	// we always deploy since this allows us to handle updates of the deploySpec
-	// TODO crd
-	if err := r.deployer.Deploy(ctx, cc); err != nil {
-		log.Debug("cannot deploy", "error", err)
-		return reconcile.Result{}, errors.Wrap(err, "cannot deploy")
-	}
-
-	// based on logic update replicas in the spec
-	log.Debug("target allocation and validation successful")
-	// a scale out/in action is triggered by periodic reconciliation (building inventory and deciding on the replicas)
 	return reconcile.Result{RequeueAfter: r.pollInterval}, r.client.Update(ctx, cc)
+}
+
+func (r *Reconciler) addWatcher(nsName string, cc *pkgmetav1.ControllerConfig) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	if _, ok := r.watchers[nsName]; !ok {
+		w := watcher.New(
+			[]chan event.GenericEvent{r.lcmGenericEventCh, r.allocGenericEventCh},
+			watcher.WithLogger(r.log),
+			watcher.WithRegistrator(r.registrator))
+
+		ctx, cfn := context.WithCancel(context.Background())
+		r.watchers[nsName] = cfn
+		w.Watch(ctx, cc)
+	}
+}
+
+func (r *Reconciler) deleteWatcher(nsName string) {
+	r.m.Lock()
+	defer r.m.Unlock()
+	cfn, ok := r.watchers[nsName]
+	if ok {
+		cfn()
+	}
 }

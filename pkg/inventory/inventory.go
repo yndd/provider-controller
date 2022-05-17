@@ -21,6 +21,8 @@ type Inventory interface {
 	BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
 	// GetLeastLoaded returns the least loaded instance of service serviceName
 	GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string
+	//
+	ISFull(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) bool
 }
 
 type invImpl struct {
@@ -56,9 +58,13 @@ func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerCo
 		if err != nil {
 			return ""
 		}
-		return findLeastLoaded(inv, serviceName)
+		return findLeastLoaded(cc, inv, serviceName)
 	}
 	return ""
+}
+
+func (i *invImpl) ISFull(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) bool {
+	return i.GetLeastLoaded(ctx, cc, serviceName) == ""
 }
 
 func (i *invImpl) getTargets(ctx context.Context, ns string) ([]targetv1.Target, error) {
@@ -123,7 +129,8 @@ func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.Contr
 	return inv, nil
 }
 
-func findLeastLoaded(inv map[string]map[string][]string, name string) string {
+// TODO: use max jobs in cc
+func findLeastLoaded(cc *pkgmetav1.ControllerConfig, inv map[string]map[string][]string, name string) string {
 	leastLoaded := ""
 	if srv, ok := inv[name]; ok {
 		var minTargets *int
