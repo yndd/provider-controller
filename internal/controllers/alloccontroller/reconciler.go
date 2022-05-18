@@ -49,23 +49,15 @@ const (
 	defaultpollInterval = 1 * time.Minute
 	shortWait           = 1 * time.Minute
 	// errors
-	errGetTarget          = "cannot get target cr"
-	errGetTargetSpec      = "cannot get target spec"
-	errGetTargetList      = "cannot get target cr list"
-	errGetPod             = "cannot get pod cr"
-	errGetPodList         = "cannot get pod cr list"
+	errGetTarget     = "cannot get target cr"
+	errGetTargetSpec = "cannot get target spec"
+	errGetTargetList = "cannot get target cr list"
+	errGetPod        = "cannot get pod cr"
+	errGetPodList    = "cannot get pod cr list"
 	//errGetCtrlMetaCfg     = "cannot get controller meta config cr"
 	errGetCtrlMetaCfgList = "cannot get controller meta config cr list"
 	errGetCrd             = "cannot get crd"
 	errUpdateStatus       = "cannot update status"
-	//errApplyStatfullSet        = "cannot apply statefulset"
-	//errApplyCertificate        = "cannot apply certificate"
-	//errApplyService            = "cannot apply service"
-	//errApplyMutatingWebhook    = "cannot apply mutating webhook"
-	//errApplyValidatingWebhook  = "cannot apply validating webhook"
-	//errApplyClusterRoles       = "cannot apply clusterrole"
-	//errApplyClusterRoleBinding = "cannot apply clusterrolebinding"
-	//errApplyServiceAccount     = "cannot apply service account"
 	//event
 	reasonCreatedStatefullSet event.Reason = "CreatedStatefullSet"
 	reasonAllocatedPod        event.Reason = "AllocatedPod"
