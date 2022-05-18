@@ -48,7 +48,6 @@ const (
 	errGetTargetList           = "cannot get target cr list"
 	errGetPod                  = "cannot get pod cr"
 	errGetPodList              = "cannot get pod cr list"
-	errGetCtrlMetaCfg          = "cannot get controller meta config cr"
 	errGetCrd                  = "cannot get crd"
 	errUpdateStatus            = "cannot update status"
 	errApplyStatfullSet        = "cannot apply statefulset"

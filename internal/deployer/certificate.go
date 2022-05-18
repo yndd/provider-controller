@@ -26,14 +26,14 @@ import (
 	"github.com/yndd/ndd-runtime/pkg/meta"
 )
 
-func renderCertificate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *certv1.Certificate { // nolint:interfacer,gocyclo
-	certificateName := getCertificateName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
-	serviceName := getServiceName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
+func renderCertificate(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *certv1.Certificate { // nolint:interfacer,gocyclo
+	certificateName := getCertificateName(cc.Name, podSpec.Name, c.Container.Name, extra.Name)
+	serviceName := getServiceName(cc.Name, podSpec.Name, c.Container.Name, extra.Name)
 
 	return &certv1.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      certificateName,
-			Namespace: ctrlMetaCfg.Namespace,
+			Namespace: cc.Namespace,
 			Labels: map[string]string{
 				getLabelKey(extra.Name): serviceName,
 			},
@@ -41,8 +41,8 @@ func renderCertificate(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav
 		},
 		Spec: certv1.CertificateSpec{
 			DNSNames: []string{
-				getDnsName(ctrlMetaCfg.Namespace, serviceName),
-				getDnsName(ctrlMetaCfg.Namespace, serviceName, "cluster", "local"),
+				getDnsName(cc.Namespace, serviceName),
+				getDnsName(cc.Namespace, serviceName, "cluster", "local"),
 			},
 			IssuerRef: certmetav1.ObjectReference{
 				Kind: "Issuer",

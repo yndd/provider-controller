@@ -35,7 +35,7 @@ type Deployer interface {
 	// add a revision
 	WithRevision(name, namespace string)
 	// deploy
-	Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.ControllerConfig) error
+	Deploy(ctx context.Context, cc *pkgmetav1.ControllerConfig) error
 }
 
 // Option can be used to manipulate Deployer config.
@@ -72,7 +72,7 @@ func New(opts ...Option) Deployer {
 }
 
 type deployer struct {
-	ctrlMetaCfg       *pkgmetav1.ControllerConfig
+	cc                *pkgmetav1.ControllerConfig
 	crdNames          []string // TODO to be updated
 	revision          string
 	revisionNamespace string
@@ -95,8 +95,8 @@ func (d *deployer) WithRevision(name, namespace string) {
 	d.revisionNamespace = namespace
 }
 
-func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.ControllerConfig) error {
-	log := d.log.WithValues("controller config name", ctrlMetaCfg.Name)
+func (d *deployer) Deploy(ctx context.Context, cc *pkgmetav1.ControllerConfig) error {
+	log := d.log.WithValues("controller config name", cc.Name)
 	log.Debug("deploy...")
 
 	// getCrds retrieves the crds from the k8s api based on the crNames
@@ -121,9 +121,9 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 	}
 
 	var grpcServiceName string
-	for _, podSpec := range ctrlMetaCfg.Spec.Pods {
+	for _, podSpec := range cc.Spec.Pods {
 		for _, c := range podSpec.Containers {
-			for _, cr := range renderClusterRoles(ctrlMetaCfg, podSpec, c, pr, crds) {
+			for _, cr := range renderClusterRoles(cc, podSpec, c, pr, crds) {
 				cr := cr // Pin range variable so we can take its address.
 				log.WithValues("role-name", cr.GetName())
 				if err := d.client.Apply(ctx, &cr); err != nil {
@@ -132,7 +132,7 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 				log.Debug("Applied RBAC ClusterRole")
 			}
 
-			crb := renderClusterRoleBinding(ctrlMetaCfg, podSpec, c, pr)
+			crb := renderClusterRoleBinding(cc, podSpec, c, pr)
 			if err := d.client.Apply(ctx, crb); err != nil {
 				return errors.Wrap(err, errApplyClusterRoleBinding)
 			}
@@ -141,14 +141,14 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 			for _, extra := range c.Extras {
 				if extra.Certificate {
 					// deploy a certificate
-					cert := renderCertificate(ctrlMetaCfg, podSpec, c, extra, pr)
+					cert := renderCertificate(cc, podSpec, c, extra, pr)
 					if err := d.client.Apply(ctx, cert); err != nil {
 						return errors.Wrap(err, errApplyCertificate)
 					}
 				}
 				if extra.Service {
 					// deploy a webhook service
-					s := renderService(ctrlMetaCfg, podSpec, c, extra, pr)
+					s := renderService(cc, podSpec, c, extra, pr)
 					if err := d.client.Apply(ctx, s); err != nil {
 						return errors.Wrap(err, errApplyService)
 					}
@@ -158,12 +158,12 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 				}
 				if extra.Webhook {
 					// deploy a mutating webhook
-					whMutate := renderWebhookMutate(ctrlMetaCfg, podSpec, c, extra, pr, crds)
+					whMutate := renderWebhookMutate(cc, podSpec, c, extra, pr, crds)
 					if err := d.client.Apply(ctx, whMutate); err != nil {
 						return errors.Wrap(err, errApplyMutatingWebhook)
 					}
 					// deploy a validating webhook
-					whValidate := renderWebhookValidate(ctrlMetaCfg, podSpec, c, extra, pr, crds)
+					whValidate := renderWebhookValidate(cc, podSpec, c, extra, pr, crds)
 					if err := d.client.Apply(ctx, whValidate); err != nil {
 						return errors.Wrap(err, errApplyValidatingWebhook)
 					}
@@ -173,11 +173,14 @@ func (d *deployer) Deploy(ctx context.Context, ctrlMetaCfg *pkgmetav1.Controller
 		switch podSpec.Type {
 		case pkgmetav1.DeploymentTypeDeployment:
 		case pkgmetav1.DeploymentTypeStatefulset:
-			s := renderStatefulSet(ctrlMetaCfg, podSpec, pr, grpcServiceName)
+			s := renderStatefulSet(cc, podSpec, pr, &Options{
+				serviceDiscoveryInfo: cc.GetServicesInfoByKind(podSpec.Kind),
+				grpcServiceName:      grpcServiceName,
+			})
 			if err := d.client.Apply(ctx, s); err != nil {
 				return errors.Wrap(err, errApplyStatfullSet)
 			}
-			sa := renderServiceAccount(ctrlMetaCfg, podSpec, pr)
+			sa := renderServiceAccount(cc, podSpec, pr)
 			if err := d.client.Apply(ctx, sa); err != nil {
 				return errors.Wrap(err, errApplyServiceAccount)
 			}

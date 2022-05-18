@@ -29,8 +29,8 @@ const (
 )
 
 // renderClusterRoles returns ClusterRoles
-func renderClusterRoleBinding(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision) *rbacv1.ClusterRoleBinding {
-	roleName := getRoleName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name)
+func renderClusterRoleBinding(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, revision pkgv1.PackageRevision) *rbacv1.ClusterRoleBinding {
+	roleName := getRoleName(cc.Name, podSpec.Name, c.Container.Name)
 	cbrName := systemClusterProviderRoleName(roleName)
 
 	ref := meta.AsController(meta.TypedReferenceTo(revision, pkgv1.ProviderRevisionGroupVersionKind))
@@ -48,8 +48,8 @@ func renderClusterRoleBinding(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec p
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      rbacv1.ServiceAccountKind,
-				Namespace: ctrlMetaCfg.Namespace,
-				Name:      getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),
+				Namespace: cc.Namespace,
+				Name:      getControllerPodKey(cc.Name, podSpec.Name),
 			},
 		},
 	}

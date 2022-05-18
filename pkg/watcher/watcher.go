@@ -19,7 +19,7 @@ type Watcher interface {
 	// add a k8s client to the Registrator
 	WithRegistrator(reg registrator.Registrator)
 	// Watch
-	Watch(ctx context.Context, ctrlMetaCfg *pkgmetav1.ControllerConfig)
+	Watch(ctx context.Context, cc *pkgmetav1.ControllerConfig)
 }
 
 // WithLogger adds a logger to the Watcher
@@ -67,13 +67,13 @@ func (w *watcher) Watch(ctx context.Context, cc *pkgmetav1.ControllerConfig) {
 	go w.watch(ctx, cc)
 }
 
-func (w *watcher) watch(ctx context.Context, ctrlMetaCfg *pkgmetav1.ControllerConfig) {
+func (w *watcher) watch(ctx context.Context, cc *pkgmetav1.ControllerConfig) {
 START:
 	/*
 		var r registrator.Registrator
-		switch ctrlMetaCfg.Spec.ServiceDiscovery {
+		switch cc.Spec.ServiceDiscovery {
 		case pkgmetav1.ServiceDiscoveryTypeConsul:
-			r = registrator.NewConsulRegistrator(ctx, ctrlMetaCfg.Spec.ServiceDiscoveryNamespace, "kind-dc1",
+			r = registrator.NewConsulRegistrator(ctx, cc.Spec.ServiceDiscoveryNamespace, "kind-dc1",
 				registrator.WithLogger(w.log),
 				registrator.WithClient(w.client),
 			)
@@ -82,9 +82,9 @@ START:
 	*/
 
 	ch := make(chan *registrator.ServiceResponse)
-	for _, pod := range ctrlMetaCfg.Spec.Pods {
+	for _, pod := range cc.Spec.Pods {
 		w.log.Debug("podInfo", "pod", pod)
-		for _, serviceInfo := range ctrlMetaCfg.GetServicesInfoByKind(pod.Kind) {
+		for _, serviceInfo := range cc.GetServicesInfoByKind(pod.Kind) {
 			w.log.Debug("serviceInfo", "serviceInfo", serviceInfo)
 			go w.registrator.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
 		}
@@ -110,7 +110,7 @@ START:
 				for _, ch := range w.eventCh {
 					ch <- event.GenericEvent{
 						Object: &pkgmetav1.ControllerConfig{
-							ObjectMeta: metav1.ObjectMeta{Name: ctrlMetaCfg.Name, Namespace: ctrlMetaCfg.Namespace},
+							ObjectMeta: metav1.ObjectMeta{Name: cc.Name, Namespace: cc.Namespace},
 						},
 					}
 				}

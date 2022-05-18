@@ -54,7 +54,7 @@ const (
 	errGetTargetList      = "cannot get target cr list"
 	errGetPod             = "cannot get pod cr"
 	errGetPodList         = "cannot get pod cr list"
-	errGetCtrlMetaCfg     = "cannot get controller meta config cr"
+	//errGetCtrlMetaCfg     = "cannot get controller meta config cr"
 	errGetCtrlMetaCfgList = "cannot get controller meta config cr list"
 	errGetCrd             = "cannot get crd"
 	errUpdateStatus       = "cannot update status"
@@ -197,26 +197,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	// get the proper controller config spec matching the vendor type
-	ctrlMetaCfgList := &pkgmetav1.ControllerConfigList{}
-	if err := r.client.List(ctx, ctrlMetaCfgList); err != nil {
+	ccList := &pkgmetav1.ControllerConfigList{}
+	if err := r.client.List(ctx, ccList); err != nil {
 		log.Debug(errGetCtrlMetaCfgList, "error", err)
 		return reconcile.Result{}, errors.Wrap(err, errGetCtrlMetaCfgList)
 	}
-	var ctrlMetaCfg *pkgmetav1.ControllerConfig
-	for _, cmc := range ctrlMetaCfgList.Items {
+	var cc *pkgmetav1.ControllerConfig
+	for _, cmc := range ccList.Items {
 		if cmc.Spec.VendorType == tspec.VendorType.String() {
-			ctrlMetaCfg = &cmc
+			cc = &cmc
 			break
 		}
 	}
-	if ctrlMetaCfg == nil {
+	if cc == nil {
 		// no controller config found for the target vendor type
 		log.Debug("no controller config found for vendor Type", "error", err)
 		return reconcile.Result{RequeueAfter: shortWait}, nil
 	}
 
 	// per service validate the allocation
-	for _, serviceInfo := range ctrlMetaCfg.GetServicesInfo() {
+	for _, serviceInfo := range cc.GetServicesInfo() {
 		log = log.WithValues("serviceName", serviceInfo.ServiceName)
 		// initialize allocation map if it is not initialized
 		if tspec.Allocation == nil {
@@ -228,7 +228,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		if !ok {
 			// service is not allocated
 			log.Debug("service is not allocated")
-			assigned := r.inventory.GetLeastLoaded(ctx, ctrlMetaCfg, serviceInfo.ServiceName)
+			assigned := r.inventory.GetLeastLoaded(ctx, cc, serviceInfo.ServiceName)
 			if assigned == "" {
 				return reconcile.Result{}, fmt.Errorf("could not assign an instance for service %q", serviceInfo.ServiceName)
 			}
@@ -264,7 +264,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 			// When the service is found
 			if serviceInfo.Kind == pkgmetav1.KindWorker {
-				targetServiceInfo := ctrlMetaCfg.GetTargetServiceInfo()
+				targetServiceInfo := cc.GetTargetServiceInfo()
 
 				availableTargetServiceInstances, err := r.registrator.Query(
 					ctx,
@@ -289,13 +289,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
 }
 
-func (r *Reconciler) addWatcher(nsName string, ctrlMetaCfg *pkgmetav1.ControllerConfig) {
+func (r *Reconciler) addWatcher(nsName string, cc *pkgmetav1.ControllerConfig) {
 	r.m.Lock()
 	defer r.m.Unlock()
 	if _, ok := r.watchers[nsName]; !ok {
 		ctx, cfn := context.WithCancel(context.Background())
 		r.watchers[nsName] = cfn
-		r.watcher.Watch(ctx, ctrlMetaCfg)
+		r.watcher.Watch(ctx, cc)
 	}
 }
 

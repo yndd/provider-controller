@@ -29,30 +29,35 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision, grpcServiceName string) *appsv1.StatefulSet {
+type Options struct {
+	serviceDiscoveryInfo []*pkgmetav1.ServiceInfo
+	grpcServiceName      string
+}
+
+func renderStatefulSet(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, revision pkgv1.PackageRevision, o *Options) *appsv1.StatefulSet {
 	s := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:            getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),
-			Namespace:       ctrlMetaCfg.Namespace,
+			Name:            getControllerPodKey(cc.Name, podSpec.Name),
+			Namespace:       cc.Namespace,
 			OwnerReferences: []metav1.OwnerReference{meta.AsController(meta.TypedReferenceTo(revision, pkgv1.ProviderRevisionGroupVersionKind))},
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: utils.Int32Ptr(1),
 			Selector: &metav1.LabelSelector{
-				MatchLabels: getLabels(ctrlMetaCfg, podSpec),
+				MatchLabels: getLabels(cc, podSpec),
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      getControllerPodKey(ctrlMetaCfg.Name, podSpec.Name),
-					Namespace: ctrlMetaCfg.Namespace,
-					Labels:    getLabels(ctrlMetaCfg, podSpec),
+					Name:      getControllerPodKey(cc.Name, podSpec.Name),
+					Namespace: cc.Namespace,
+					Labels:    getLabels(cc, podSpec),
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext:    getPodSecurityContext(),
-					ServiceAccountName: renderServiceAccount(ctrlMetaCfg, podSpec, revision).GetName(),
+					ServiceAccountName: renderServiceAccount(cc, podSpec, revision).GetName(),
 					ImagePullSecrets:   revision.GetPackagePullSecrets(),
-					Containers:         getContainers(ctrlMetaCfg, podSpec, revision.GetPackagePullPolicy(), grpcServiceName),
-					Volumes:            getVolumes(ctrlMetaCfg, podSpec),
+					Containers:         getContainers(cc, podSpec, revision.GetPackagePullPolicy(), o),
+					Volumes:            getVolumes(cc, podSpec),
 				},
 			},
 		},
@@ -61,11 +66,11 @@ func renderStatefulSet(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav
 	return s
 }
 
-func getLabels(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec) map[string]string {
-	labels := getRevisionLabel(ctrlMetaCfg.Name, podSpec)
+func getLabels(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec) map[string]string {
+	labels := getRevisionLabel(cc.Name, podSpec)
 	for _, container := range podSpec.Containers {
 		for _, extra := range container.Extras {
-			labels[getLabelKey(extra.Name)] = getServiceName(ctrlMetaCfg.Name, podSpec.Name, container.Container.Name, extra.Name)
+			labels[getLabelKey(extra.Name)] = getServiceName(cc.Name, podSpec.Name, container.Container.Name, extra.Name)
 		}
 	}
 	return labels
@@ -89,7 +94,7 @@ func getSecurityContext() *corev1.SecurityContext {
 	}
 }
 
-func getEnv(grpcServiceName string) []corev1.EnvVar {
+func getEnv(o *Options) []corev1.EnvVar {
 	// environment parameters used in the deployment/statefulset
 	envNameSpace := corev1.EnvVar{
 		Name: "POD_NAMESPACE",
@@ -136,29 +141,50 @@ func getEnv(grpcServiceName string) []corev1.EnvVar {
 			},
 		},
 	}
-	envGRPCSvc := corev1.EnvVar{
+	envGrpcSvc := corev1.EnvVar{
 		Name:  "GRPC_SVC_NAME",
-		Value: grpcServiceName,
+		Value: o.grpcServiceName,
 	}
 
-	return []corev1.EnvVar{
+	envs := []corev1.EnvVar{
 		envNameSpace,
 		envPodIP,
 		envPodName,
 		envNodeName,
 		envNodeIP,
-		envGRPCSvc,
+		envGrpcSvc,
 	}
+
+	for _, serviceInfo := range o.serviceDiscoveryInfo {
+		switch serviceInfo.Kind {
+		case pkgmetav1.KindNone:
+			envs = append(envs, corev1.EnvVar{
+				Name:  "TARGET_SERVICE_NAME",
+				Value: serviceInfo.ServiceName,
+			})
+		default:
+			envs = append(envs, corev1.EnvVar{
+				Name:  "SERVICE_NAME",
+				Value: serviceInfo.ServiceName,
+			})
+		}
+	}
+
+	//pkgmetav1.GetServiceName(r.options.ControllerConfigName, "worker")
+	//pkgmetav1.GetServiceName(r.options.ControllerConfigName, "reconciler")
+	///Name: pkgmetav1.GetServiceName(ti.controllerName, strings.Join([]string{"worker", "target"}, "-"))
+
+	return envs
 }
 
-func getContainers(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, pullPolicy *corev1.PullPolicy, grpcServiceName string) []corev1.Container {
+func getContainers(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, pullPolicy *corev1.PullPolicy, o *Options) []corev1.Container {
 	containers := []corev1.Container{}
 
 	for _, container := range podSpec.Containers {
 		if container.Container.Name == "kube-rbac-proxy" {
 			containers = append(containers, getKubeProxyContainer())
 		} else {
-			containers = append(containers, getContainer(ctrlMetaCfg, container, pullPolicy, grpcServiceName))
+			containers = append(containers, getContainer(cc, container, pullPolicy, o))
 		}
 	}
 
@@ -188,10 +214,10 @@ func getProxyArgs() []string {
 	}
 }
 
-func getArgs(ctrlMetaCfg *pkgmetav1.ControllerConfig) []string {
-	cnArg := strings.Join([]string{"--controller-name", ctrlMetaCfg.Name}, "=")
+func getArgs(cc *pkgmetav1.ControllerConfig) []string {
+	cnArg := strings.Join([]string{"--controller-name", cc.Name}, "=")
 	dkArg := strings.Join([]string{"--deployment-kind", "distributed"}, "=")
-	cnsArg := strings.Join([]string{"--consul-namespace", ctrlMetaCfg.Spec.ServiceDiscoveryNamespace}, "=")
+	cnsArg := strings.Join([]string{"--consul-namespace", cc.Spec.ServiceDiscoveryNamespace}, "=")
 	return []string{
 		"start",
 		cnArg,
@@ -222,7 +248,7 @@ func getVolumeMounts(c pkgmetav1.ContainerSpec) []corev1.VolumeMount {
 	return volumes
 }
 
-func getVolumes(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec) []corev1.Volume {
+func getVolumes(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec) []corev1.Volume {
 	volume := []corev1.Volume{}
 	for _, c := range podSpec.Containers {
 		for _, extra := range c.Extras {
@@ -231,7 +257,7 @@ func getVolumes(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSp
 					Name: extra.Name,
 					VolumeSource: corev1.VolumeSource{
 						Secret: &corev1.SecretVolumeSource{
-							SecretName:  getCertificateName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name),
+							SecretName:  getCertificateName(cc.Name, podSpec.Name, c.Container.Name, extra.Name),
 							DefaultMode: utils.Int32Ptr(420),
 						},
 					},
@@ -249,14 +275,14 @@ func getVolumes(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSp
 	return volume
 }
 
-func getContainer(ctrlMetaCfg *pkgmetav1.ControllerConfig, c pkgmetav1.ContainerSpec, pullPolicy *corev1.PullPolicy, grpcServiceName string) corev1.Container {
+func getContainer(cc *pkgmetav1.ControllerConfig, c pkgmetav1.ContainerSpec, pullPolicy *corev1.PullPolicy, o *Options) corev1.Container {
 	return corev1.Container{
 		Name:            c.Container.Name,
 		Image:           c.Container.Image,
 		ImagePullPolicy: *pullPolicy,
 		SecurityContext: getSecurityContext(),
-		Args:            getArgs(ctrlMetaCfg),
-		Env:             getEnv(grpcServiceName),
+		Args:            getArgs(cc),
+		Env:             getEnv(o),
 		Command: []string{
 			containerStartupCmd,
 		},

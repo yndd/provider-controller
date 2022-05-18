@@ -26,8 +26,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func renderService(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *corev1.Service { // nolint:interfacer,gocyclo
-	serviceName := getServiceName(ctrlMetaCfg.Name, podSpec.Name, c.Container.Name, extra.Name)
+func renderService(cc *pkgmetav1.ControllerConfig, podSpec pkgmetav1.PodSpec, c pkgmetav1.ContainerSpec, extra pkgmetav1.Extras, revision pkgv1.PackageRevision) *corev1.Service { // nolint:interfacer,gocyclo
+	serviceName := getServiceName(cc.Name, podSpec.Name, c.Container.Name, extra.Name)
 
 	port := int32(443)
 
@@ -46,7 +46,7 @@ func renderService(ctrlMetaCfg *pkgmetav1.ControllerConfig, podSpec pkgmetav1.Po
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
-			Namespace: ctrlMetaCfg.Namespace,
+			Namespace: cc.Namespace,
 			Labels: map[string]string{
 				getLabelKey(extra.Name): serviceName,
 			},
