@@ -51,7 +51,7 @@ help: ## Display this help.
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	rm -rf package/crds/
+	rm -rf package/crds/*
 	## $(CONTROLLER_GEN) $(CRD_OPTIONS) webhook paths="./..." output:crd:artifacts:config=package/crds
 	## $(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
@@ -87,7 +87,7 @@ docker-push: ## Push docker image with the manager.
 
 .PHONY: package-build
 package-build: kubectl-ndd ## build ndd package.
-	rm -rf package/ndd-*
+	rm -rf package/*.nddpkg
 	cd package;PATH=$$PATH:$(LOCALBIN) kubectl ndd package build -t provider;cd ..
 
 .PHONY: package-push

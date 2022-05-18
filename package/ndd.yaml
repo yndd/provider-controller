@@ -11,8 +11,6 @@ spec:
     - apiGroups: [dvr.ndd.yndd.io]
       resources: [targets]
       verbs: [get, list, watch, update, patch, create, delete]
-    #apis:
-    #- {group: srl.config.ndd.yndd.io, version: v1alpha1, kind: srlconfig}
     
           
 
