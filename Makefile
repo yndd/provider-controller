@@ -86,13 +86,13 @@ docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
 .PHONY: package-build
-package-build: ## build ndd package.
-	rm -rf package/*.nddpkg
-	cd package;kubectl ndd package build -t provider;cd ..
+package-build: kubectl-ndd ## build ndd package.
+	rm -rf package/ndd-*
+	cd package;PATH=$$PATH:$(LOCALBIN) kubectl ndd package build -t provider;cd ..
 
 .PHONY: package-push
-package-push: ## build ndd package.
-	cd package;kubectl ndd package push ${PKG};cd ..
+package-push: kubectl-ndd ## build ndd package.
+	cd package;PATH=$$PATH:$(LOCALBIN) kubectl ndd package push ${PKG};cd ..
 
 
 ##@ Build Dependencies
@@ -111,7 +111,7 @@ KUBECTL_NDD ?= $(LOCALBIN)/kubectl-ndd
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.8.7
 CONTROLLER_TOOLS_VERSION ?= v0.8.0
-KUBECTL_NDD_VERSION ?= v0.2.18
+KUBECTL_NDD_VERSION ?= v0.2.20
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize

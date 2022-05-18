@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/cert-manager/cert-manager v1.8.0
 	github.com/pkg/errors v0.9.1
-	github.com/yndd/ndd-core v0.2.17
+	github.com/yndd/ndd-core v0.2.20
 	github.com/yndd/ndd-runtime v0.5.8
 	github.com/yndd/ndd-target-runtime v0.0.41
 	github.com/yndd/registrator v0.0.10
