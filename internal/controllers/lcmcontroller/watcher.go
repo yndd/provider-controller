@@ -19,7 +19,7 @@ package lcmcontroller
 import (
 	"context"
 
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -32,39 +32,39 @@ import (
 type adder interface {
 	Add(item interface{})
 }
-type EnqueueRequestForAllControllerConfig struct {
+type EnqueueRequestForAllCompositeProvider struct {
 	client client.Client
 	log    logging.Logger
 	ctx    context.Context
 }
 
 // Create enqueues a request for all infrastructures which pertains to the topology.
-func (e *EnqueueRequestForAllControllerConfig) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestForAllCompositeProvider) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.Object, q)
 }
 
 // Create enqueues a request for all infrastructures which pertains to the topology.
-func (e *EnqueueRequestForAllControllerConfig) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestForAllCompositeProvider) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.ObjectOld, q)
 	e.add(evt.ObjectNew, q)
 }
 
 // Create enqueues a request for all infrastructures which pertains to the topology.
-func (e *EnqueueRequestForAllControllerConfig) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestForAllCompositeProvider) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.Object, q)
 }
 
 // Create enqueues a request for all infrastructures which pertains to the topology.
-func (e *EnqueueRequestForAllControllerConfig) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (e *EnqueueRequestForAllCompositeProvider) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.Object, q)
 }
 
-func (e *EnqueueRequestForAllControllerConfig) add(obj runtime.Object, queue adder) {
-	cr, ok := obj.(*pkgmetav1.ControllerConfig)
+func (e *EnqueueRequestForAllCompositeProvider) add(obj runtime.Object, queue adder) {
+	cr, ok := obj.(*pkgv1.CompositeProvider)
 	if !ok {
 		return
 	}
-	log := e.log.WithValues("event handler lcm controller", "ControllerConfig", "name", cr.GetName())
+	log := e.log.WithValues("event handler lcm controller", "CompositeProvider", "name", cr.GetName())
 	log.Debug("handleEvent")
 
 	queue.Add(reconcile.Request{NamespacedName: types.NamespacedName{

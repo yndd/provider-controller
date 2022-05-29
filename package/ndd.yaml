@@ -3,14 +3,38 @@ apiVersion: meta.pkg.ndd.yndd.io/v1
 kind: Provider
 metadata:
   name: provider-controller
+  namespace: ndd-system
 spec:
-  type: controller
-  controller:
-    image: yndd/provider-controller-controller:latest
+  serviceDiscovery: consul
+  serviceDiscoveryNamespace: consul
+  pod:
+    name: provider-controller
+    type: deployment
     permissionRequests:
     - apiGroups: [dvr.ndd.yndd.io]
       resources: [targets]
       verbs: [get, list, watch, update, patch, create, delete]
+    - apiGroups: [pkg.ndd.yndd.io]
+      resources: [compositeproviders]
+      verbs: [get, list, watch]
+    containers:
+    - container:
+        name: kube-rbac-proxy
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
+        args:
+        - --secure-listen-address=0.0.0.0:8443
+        - --upstream=http://127.0.0.1:8080/
+        - --logtostderr=true
+        - --v=10
+        ports:
+        - containerPort: 8443
+          name: https
+    - container:
+        name: controller
+        image: yndd/provider-controller-controller:latest
+      extras:
+      - {name: metrics, service: true, port: 8443, target-port: 443}
+      - {name: profiler, volume: true}
     
           
 

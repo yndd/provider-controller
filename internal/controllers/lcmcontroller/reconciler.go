@@ -24,15 +24,17 @@ import (
 
 	"github.com/pkg/errors"
 	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/event"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/meta"
 	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
 	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
-	"github.com/yndd/provider-controller/internal/deployer"
 	"github.com/yndd/provider-controller/pkg/inventory"
 	"github.com/yndd/registrator/registrator"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	cevent "sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,35 +78,17 @@ type Reconciler struct {
 	// servicediscovery registrator
 	registrator registrator.Registrator
 	inventory   inventory.Inventory
-	deployer    deployer.Deployer
+	//deployer    deployer.Deployer
 
 	m             sync.Mutex
 	watchers      map[string]context.CancelFunc
 	newTargetList func() targetv1.TgList
 
-	crdNames          []string
-	revision          string
-	revisionNamespace string
-	pollInterval      time.Duration
+	crdNames     []string
+	pollInterval time.Duration
 
-	//newProviderRevision func() pkgv1.PackageRevision
 	log    logging.Logger
 	record event.Recorder
-}
-
-// WithCrdNames specifies the crdNames in the reconciler
-func WithCrdNames(n []string) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.crdNames = n
-	}
-}
-
-// WithRevision specifies the revision
-func WithRevision(name, namespace string) ReconcilerOption {
-	return func(r *Reconciler) {
-		r.revision = name
-		r.revisionNamespace = namespace
-	}
 }
 
 // WithLogger specifies how the Reconciler logs messages.
@@ -130,19 +114,17 @@ func WithRegistrator(reg registrator.Registrator) ReconcilerOption {
 
 // SetupProvider adds a controller that reconciles Providers.
 func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.GenericEvent, error) {
-	name := "config-controller/" + strings.ToLower(pkgmetav1.ControllerConfigGroupKind)
+	name := "config-controller/" + strings.ToLower(pkgv1.CompositeProviderGroupKind)
 
 	e := make(chan cevent.GenericEvent)
 
 	r := NewReconciler(mgr,
 		WithRegistrator(nddopts.Registrator),
-		WithRevision(nddopts.Revision, nddopts.RevisionNamespace),
-		WithCrdNames(nddopts.CrdNames),
 		WithLogger(nddopts.Logger),
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
-	ControllerConfigHandler := &EnqueueRequestForAllControllerConfig{
+	CompositeProviderHandler := &EnqueueRequestForAllCompositeProvider{
 		client: mgr.GetClient(),
 		log:    nddopts.Logger,
 		ctx:    context.Background(),
@@ -151,10 +133,9 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.
 	return e, ctrl.NewControllerManagedBy(mgr).
 		WithOptions(nddopts.Copts).
 		Named(name).
-		For(&pkgmetav1.ControllerConfig{}).
-		Owns(&pkgmetav1.ControllerConfig{}).
+		For(&pkgv1.CompositeProvider{}).
 		WithEventFilter(resource.IgnoreUpdateWithoutGenerationChangePredicate()).
-		Watches(&source.Channel{Source: e}, ControllerConfigHandler).
+		Watches(&source.Channel{Source: e}, CompositeProviderHandler).
 		Complete(r)
 }
 
@@ -179,17 +160,6 @@ func NewReconciler(m ctrl.Manager, opts ...ReconcilerOption) *Reconciler {
 		f(r)
 	}
 
-	r.deployer = deployer.New(
-		deployer.WithClient(
-			resource.ClientApplicator{
-				Client:     m.GetClient(),
-				Applicator: resource.NewAPIPatchingApplicator(m.GetClient()),
-			},
-		),
-		deployer.WithLogger(r.log),
-		deployer.WithRevision(r.revision, r.revisionNamespace),
-	)
-
 	r.inventory = inventory.New(m.GetClient(), r.registrator)
 	return r
 }
@@ -199,59 +169,80 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	log.Debug("lcm reconciler start...")
 
 	// get the controller config info
-	cc := &pkgmetav1.ControllerConfig{}
-	if err := r.client.Get(ctx, req.NamespacedName, cc); err != nil {
+	cp := &pkgv1.CompositeProvider{}
+	if err := r.client.Get(ctx, req.NamespacedName, cp); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
 		log.Debug(errGetControllerConfig, "error", err)
 		return reconcile.Result{}, errors.Wrap(resource.IgnoreNotFound(err), errGetControllerConfig)
 	}
 
-	record := r.record.WithAnnotations("external-name", meta.GetExternalName(cc))
+	record := r.record.WithAnnotations("external-name", meta.GetExternalName(cp))
 
-	if meta.WasDeleted(cc) {
+	if meta.WasDeleted(cp) {
 		// Delete the watcher
 		// r.deleteWatcher(req.NamespacedName.String())
 		// Delete finalizer after the object is deleted
-		if err := r.finalizer.RemoveFinalizer(ctx, cc); err != nil {
+		if err := r.finalizer.RemoveFinalizer(ctx, cp); err != nil {
 			log.Debug("Cannot remove target cr finalizer", "error", err)
 			return reconcile.Result{Requeue: true}, errors.Wrap(err, "cannot remove finalizer")
 		}
-		return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Update(ctx, cc), "cannot remove finalizer")
+		return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Update(ctx, cp), "cannot remove finalizer")
 	}
 
 	// Add a finalizer
-	if err := r.finalizer.AddFinalizer(ctx, cc); err != nil {
+	if err := r.finalizer.AddFinalizer(ctx, cp); err != nil {
 		log.Debug("cannot add finalizer", "error", err)
-		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cc), "cannot add finalizer")
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cp), "cannot add finalizer")
 	}
 
-	log.Debug("ctrlMetaCfg", "ctrlMetaCfg spec", cc.Spec)
+	log.Debug("ctrlMetaCfg", "ctrlMetaCfg spec", cp.Spec)
 	// r.addWatcher(req.NamespacedName.String(), cc)
 
-	for _, pod := range cc.Spec.Pods {
-		srvName := pkgmetav1.GetServiceName(cc.Name, pod.Name)
-		if !r.inventory.ISFull(ctx, cc, srvName) {
+	for _, pkg := range cp.Spec.Packages {
+		srvName := pkgv1.GetServiceName(cp.Name, pkg.Name)
+		if !r.inventory.ISFull(ctx, cp, srvName) {
 			continue
 		}
+		ss := &appsv1.StatefulSet{}
+		if err := r.client.Get(ctx, types.NamespacedName{
+			Namespace: cp.GetNamespace(),
+			Name:      srvName,
+		}, ss); err != nil {
+			log.Debug("cannot get statefulset", "error", err)
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cp), "cannot get statefulset")
+		}
+
+		p := &pkgmetav1.Provider{}
+		if err := r.client.Get(ctx, types.NamespacedName{
+			Namespace: cp.GetNamespace(),
+			Name:      srvName,
+		}, p); err != nil {
+			log.Debug("cannot get provider", "error", err)
+			return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cp), "cannot get provider")
+		}
+
 		// scale out
-		if pod.Replicas < pod.MaxReplicas {
-			pod.Replicas++
+		if *ss.Spec.Replicas < *p.Spec.Pod.MaxReplicas {
+			// TODO add label to statefulsets
+			//pkg.Replicas++
 			continue
 		}
 		log.Info("service already at max replicas", "service", srvName)
-		record.Event(cc, event.Warning(reasonMaxReplicasReached, nil, "service-name", srvName))
+		record.Event(cp, event.Warning(reasonMaxReplicasReached, nil, "service-name", srvName))
 	}
 
 	// we always deploy since this allows us to handle updates of the deploySpec
 	// TODO crd
-	if err := r.deployer.Deploy(ctx, cc); err != nil {
-		log.Debug("cannot deploy", "error", err)
-		return reconcile.Result{}, errors.Wrap(err, "cannot deploy")
-	}
+	/*
+		if err := r.deployer.Deploy(ctx, cp); err != nil {
+			log.Debug("cannot deploy", "error", err)
+			return reconcile.Result{}, errors.Wrap(err, "cannot deploy")
+		}
+	*/
 
 	// based on logic update replicas in the spec
 	log.Debug("target allocation and validation successful")
 	// a scale out/in action is triggered by periodic reconciliation (building inventory and deciding on the replicas)
-	return reconcile.Result{RequeueAfter: r.pollInterval}, r.client.Update(ctx, cc)
+	return reconcile.Result{RequeueAfter: r.pollInterval}, r.client.Update(ctx, cp)
 }

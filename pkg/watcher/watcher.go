@@ -3,7 +3,7 @@ package watcher
 import (
 	"context"
 
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/registrator/registrator"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -19,7 +19,7 @@ type Watcher interface {
 	// add a k8s client to the Registrator
 	WithRegistrator(reg registrator.Registrator)
 	// Watch
-	Watch(ctx context.Context, cc *pkgmetav1.ControllerConfig)
+	Watch(ctx context.Context, cc *pkgv1.CompositeProvider)
 }
 
 // WithLogger adds a logger to the Watcher
@@ -63,11 +63,11 @@ func (w *watcher) WithRegistrator(reg registrator.Registrator) {
 	w.registrator = reg
 }
 
-func (w *watcher) Watch(ctx context.Context, cc *pkgmetav1.ControllerConfig) {
+func (w *watcher) Watch(ctx context.Context, cc *pkgv1.CompositeProvider) {
 	go w.watch(ctx, cc)
 }
 
-func (w *watcher) watch(ctx context.Context, cc *pkgmetav1.ControllerConfig) {
+func (w *watcher) watch(ctx context.Context, cc *pkgv1.CompositeProvider) {
 START:
 	/*
 		var r registrator.Registrator
@@ -82,11 +82,11 @@ START:
 	*/
 
 	ch := make(chan *registrator.ServiceResponse)
-	for _, pod := range cc.Spec.Pods {
-		w.log.Debug("podInfo", "pod", pod)
-		for _, serviceInfo := range cc.GetServicesInfoByKind(pod.Kind) {
+	for _, pkg := range cc.Spec.Packages {
+		w.log.Debug("podInfo", "pod", pkg)
+		for _, serviceInfo := range cc.GetServicesInfoByKind(pkg.Kind) {
 			w.log.Debug("serviceInfo", "serviceInfo", serviceInfo)
-			go w.registrator.WatchCh(ctx, serviceInfo.ServiceName, []string{}, ch)
+			go w.registrator.WatchCh(ctx, serviceInfo.ServiceName, []string{}, registrator.WatchOptions{}, ch)
 		}
 	}
 
@@ -109,7 +109,7 @@ START:
 			if serviceResp != nil {
 				for _, ch := range w.eventCh {
 					ch <- event.GenericEvent{
-						Object: &pkgmetav1.ControllerConfig{
+						Object: &pkgv1.CompositeProvider{
 							ObjectMeta: metav1.ObjectMeta{Name: cc.Name, Namespace: cc.Namespace},
 						},
 					}

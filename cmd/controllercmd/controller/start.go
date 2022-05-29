@@ -28,7 +28,6 @@ import (
 	"github.com/pkg/profile"
 	"github.com/spf13/cobra"
 
-	"github.com/yndd/ndd-target-runtime/pkg/resource"
 	"github.com/yndd/provider-controller/internal/controllers"
 	"github.com/yndd/registrator/registrator"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -36,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/ratelimiter"
 	"github.com/yndd/ndd-target-runtime/pkg/shared"
@@ -51,15 +51,11 @@ var (
 	concurrency               int
 	pollInterval              time.Duration
 	namespace                 string
-	podname                   string
-	grpcServerAddress         string
-	grpcQueryAddress          string
-	autoPilot                 bool
-	revision                  string
-	revisionNamespace         string
-	serviceDiscoveryNamespace string   // todo initialization
-	controllerConfigName      string   // To be removed
-	crdNames                  []string // to be removed
+	serviceDiscoveryNamespace string
+	serviceDiscovery          string
+	serviceDiscoveryDcName    string
+	//revision                  string
+	//revisionNamespace         string
 )
 
 // startCmd represents the start command for the network device driver
@@ -97,34 +93,25 @@ var startCmd = &cobra.Command{
 			return errors.Wrap(err, "Cannot create manager")
 		}
 
-		// get k8s client direct to the api server, since the mgr client
-		// is not yet initialized
-		client, err := getClient(scheme)
-		if err != nil {
-			return err
-		}
-
 		ctx, cancel := context.WithCancel(cmd.Context())
 		defer cancel()
 		zlog.Info("serviceDiscoveryNamespace", "serviceDiscoveryNamespace", serviceDiscoveryNamespace)
-		reg, err := registrator.NewConsulRegistrator(ctx, serviceDiscoveryNamespace, "",
-			registrator.WithClient(resource.ClientApplicator{
-				Client:     client,
-				Applicator: resource.NewAPIPatchingApplicator(client),
-			}),
-			registrator.WithLogger(logger))
-
+		reg, err := registrator.New(ctx, mgr.GetConfig(), &registrator.Options{
+			Logger:                    logger,
+			Scheme:                    scheme,
+			ServiceDiscoveryDcName:    "",
+			ServiceDiscovery:          pkgmetav1.ServiceDiscoveryType(serviceDiscovery),
+			ServiceDiscoveryNamespace: serviceDiscoveryNamespace,
+		})
 		if err != nil {
 			return errors.Wrap(err, "Cannot initialize registrator")
 		}
 
 		nddcopts := &shared.NddControllerOptions{
-			Logger:            logger,
-			Registrator:       reg,
-			Poll:              pollInterval,
-			Namespace:         namespace,
-			Revision:          revision,
-			RevisionNamespace: revisionNamespace,
+			Logger:      logger,
+			Registrator: reg,
+			Poll:        pollInterval,
+			Namespace:   namespace,
 			Copts: controller.Options{
 				MaxConcurrentReconciles: concurrency,
 				RateLimiter:             ratelimiter.NewDefaultProviderRateLimiter(ratelimiter.DefaultProviderRPS),
@@ -163,16 +150,12 @@ func init() {
 	startCmd.Flags().IntVarP(&concurrency, "concurrency", "", 1, "Number of items to process simultaneously")
 	startCmd.Flags().DurationVarP(&pollInterval, "poll-interval", "", 10*time.Minute, "Poll interval controls how often an individual resource should be checked for drift.")
 	startCmd.Flags().StringVarP(&namespace, "namespace", "n", os.Getenv("POD_NAMESPACE"), "Namespace used to unpack and run packages.")
-	startCmd.Flags().StringVarP(&podname, "podname", "", os.Getenv("POD_NAME"), "Name from the pod")
-	startCmd.Flags().StringVarP(&grpcServerAddress, "grpc-server-address", "s", "", "The address of the grpc server binds to.")
-	startCmd.Flags().StringVarP(&grpcQueryAddress, "grpc-query-address", "", "", "Validation query address.")
-	startCmd.Flags().BoolVarP(&autoPilot, "autopilot", "a", true,
-		"Apply delta/diff changes to the config automatically when set to true, if set to false the provider will report the delta and the operator should intervene what to do with the delta/diffs")
-	startCmd.Flags().StringVarP(&revision, "revision", "", "", "The name of the provider revision that holds the status ifnormation for the controller")
-	startCmd.Flags().StringVarP(&revisionNamespace, "revision-namespace", "", "", "The namespace of the provider revision that holds the status ifnormation for the controller")
-	startCmd.Flags().StringVarP(&serviceDiscoveryNamespace, "service-discovery-namespace", "", "consul", "the namespace for service discovery")
-	startCmd.Flags().StringVarP(&controllerConfigName, "controller-config-name", "", "", "The name of the controller configuration")
-	startCmd.Flags().StringSliceVarP(&crdNames, "crd-names", "", []string{}, "The name of the crds")
+	//startCmd.Flags().StringVarP(&podname, "podname", "", os.Getenv("POD_NAME"), "Name from the pod")
+	//startCmd.Flags().StringVarP(&revision, "revision", "", "", "The name of the provider revision that holds the status ifnormation for the controller")
+	//startCmd.Flags().StringVarP(&revisionNamespace, "revision-namespace", "", "", "The namespace of the provider revision that holds the status ifnormation for the controller")
+	startCmd.Flags().StringVarP(&serviceDiscovery, "service-discovery", "", os.Getenv("SERVICE_DISCOVERY"), "the service discovery kind used in this deployment")
+	startCmd.Flags().StringVarP(&serviceDiscoveryNamespace, "service-discovery-namespace", "", os.Getenv("SERVICE_DISCOVERY_NAMESPACE"), "the namespace used for service discovery")
+	startCmd.Flags().StringVarP(&serviceDiscoveryDcName, "service-discovery-dc-name", "", os.Getenv("SERVICE_DISCOVERY_DCNAME"), "The dc name used in service discovery")
 }
 
 func getClient(scheme *runtime.Scheme) (client.Client, error) {

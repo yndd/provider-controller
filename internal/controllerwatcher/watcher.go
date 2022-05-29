@@ -19,7 +19,7 @@ package controllerwatcher
 import (
 	"context"
 
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -62,7 +62,7 @@ func (e *EnqueueRequestForAllControllerConfig) Generic(evt event.GenericEvent, q
 }
 
 func (e *EnqueueRequestForAllControllerConfig) add(obj runtime.Object, queue adder) {
-	cr, ok := obj.(*pkgmetav1.ControllerConfig)
+	cr, ok := obj.(*pkgv1.CompositeProvider)
 	if !ok {
 		return
 	}

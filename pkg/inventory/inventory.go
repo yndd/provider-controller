@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	targetv1 "github.com/yndd/ndd-target-runtime/apis/dvr/v1"
 	"github.com/yndd/registrator/registrator"
 	"k8s.io/utils/pointer"
@@ -15,14 +15,14 @@ type Option func(Inventory)
 type Inventory interface {
 	// Build builds a map of service --> serviceInstance --> []targets based on
 	// the assignments in the target spec
-	Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
+	Build(ctx context.Context, cc *pkgv1.CompositeProvider) (map[string]map[string][]string, error)
 	// BuildFromRegistry builds the same map as Build based on the target
 	// registrations in the registrator
-	BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error)
+	BuildFromRegistry(ctx context.Context, cc *pkgv1.CompositeProvider) (map[string]map[string][]string, error)
 	// GetLeastLoaded returns the least loaded instance of service serviceName
-	GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string
+	GetLeastLoaded(ctx context.Context, cc *pkgv1.CompositeProvider, serviceName string) string
 	//
-	ISFull(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) bool
+	ISFull(ctx context.Context, cc *pkgv1.CompositeProvider, serviceName string) bool
 }
 
 type invImpl struct {
@@ -37,7 +37,7 @@ func New(k client.Client, reg registrator.Registrator) Inventory {
 	}
 }
 
-func (i *invImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) Build(ctx context.Context, cc *pkgv1.CompositeProvider) (map[string]map[string][]string, error) {
 	targets, err := i.getTargets(ctx, "") // TODO: add namespace to controllerConfig spec and use it here
 	if err != nil {
 		return nil, err
@@ -45,13 +45,13 @@ func (i *invImpl) Build(ctx context.Context, cc *pkgmetav1.ControllerConfig) (ma
 	return i.inventoryFromTargets(targets)
 }
 
-func (i *invImpl) BuildFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) BuildFromRegistry(ctx context.Context, cc *pkgv1.CompositeProvider) (map[string]map[string][]string, error) {
 	return i.inventoryFromRegistry(ctx, cc)
 }
 
-func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) string {
-	for _, pod := range cc.Spec.Pods {
-		if serviceName != pkgmetav1.GetServiceName(cc.Name, pod.Name) {
+func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgv1.CompositeProvider, serviceName string) string {
+	for _, pkg := range cc.Spec.Packages {
+		if serviceName != pkgv1.GetServiceName(cc.Name, pkg.Name) {
 			continue
 		}
 		inv, err := i.Build(ctx, cc)
@@ -63,7 +63,7 @@ func (i *invImpl) GetLeastLoaded(ctx context.Context, cc *pkgmetav1.ControllerCo
 	return ""
 }
 
-func (i *invImpl) ISFull(ctx context.Context, cc *pkgmetav1.ControllerConfig, serviceName string) bool {
+func (i *invImpl) ISFull(ctx context.Context, cc *pkgv1.CompositeProvider, serviceName string) bool {
 	return i.GetLeastLoaded(ctx, cc, serviceName) == ""
 }
 
@@ -102,7 +102,7 @@ func (i *invImpl) inventoryFromTargets(targets []targetv1.Target) (map[string]ma
 	return inv, nil
 }
 
-func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.ControllerConfig) (map[string]map[string][]string, error) {
+func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgv1.CompositeProvider) (map[string]map[string][]string, error) {
 	inv := make(map[string]map[string][]string)
 	serv := cc.GetTargetServiceInfo()
 	services, err := i.reg.Query(ctx, serv.ServiceName, []string{})
@@ -130,7 +130,7 @@ func (i *invImpl) inventoryFromRegistry(ctx context.Context, cc *pkgmetav1.Contr
 }
 
 // TODO: use max jobs in cc
-func findLeastLoaded(cc *pkgmetav1.ControllerConfig, inv map[string]map[string][]string, name string) string {
+func findLeastLoaded(cc *pkgv1.CompositeProvider, inv map[string]map[string][]string, name string) string {
 	leastLoaded := ""
 	if srv, ok := inv[name]; ok {
 		var minTargets *int

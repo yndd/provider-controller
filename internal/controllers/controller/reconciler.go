@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/provider-controller/pkg/watcher"
 	"github.com/yndd/registrator/registrator"
 
@@ -115,7 +115,7 @@ func WithLCMGenericEventChs(geCh chan event.GenericEvent) ReconcilerOption {
 
 // SetupProvider adds a controller that reconciles Providers.
 func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions, lcmCh, allocCh chan event.GenericEvent) error {
-	name := "config-controller/" + strings.ToLower(pkgmetav1.ControllerConfigGroupKind)
+	name := "config-controller/" + strings.ToLower(pkgv1.CompositeProviderGroupKind)
 
 	r := NewReconciler(mgr,
 		WithLogger(nddopts.Logger),
@@ -128,8 +128,7 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions, lcmCh, allocC
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(nddopts.Copts).
 		Named(name).
-		For(&pkgmetav1.ControllerConfig{}).
-		Owns(&pkgmetav1.ControllerConfig{}).
+		For(&pkgv1.CompositeProvider{}).
 		Complete(r)
 }
 
@@ -159,9 +158,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	log := r.log.WithValues("NameSpaceName", req.NamespacedName)
 	log.Debug("controller reconciler start...")
 
-	// get the controller config info
-	cc := &pkgmetav1.ControllerConfig{}
-	if err := r.client.Get(ctx, req.NamespacedName, cc); err != nil {
+	// get the composite provider info
+	cp := &pkgv1.CompositeProvider{}
+	if err := r.client.Get(ctx, req.NamespacedName, cp); err != nil {
 		// There's no need to requeue if we no longer exist. Otherwise we'll be
 		// requeued implicitly because we return an error.
 		log.Debug(errGetControllerConfig, "error", err)
@@ -170,21 +169,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	// record := r.record.WithAnnotations("external-name", meta.GetExternalName(cc))
 
-	if meta.WasDeleted(cc) {
+	if meta.WasDeleted(cp) {
 		// Stop watcher
 		r.deleteWatcher(req.NamespacedName.String())
 		// Delete finalizer after the object is deleted
-		if err := r.finalizer.RemoveFinalizer(ctx, cc); err != nil {
+		if err := r.finalizer.RemoveFinalizer(ctx, cp); err != nil {
 			log.Debug("Cannot remove controller config finalizer", "error", err)
 			return reconcile.Result{Requeue: true}, errors.Wrap(err, "cannot remove finalizer")
 		}
-		return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Update(ctx, cc), "cannot remove finalizer")
+		return reconcile.Result{Requeue: false}, errors.Wrap(r.client.Update(ctx, cp), "cannot remove finalizer")
 	}
 
 	// Add a finalizer
-	if err := r.finalizer.AddFinalizer(ctx, cc); err != nil {
+	if err := r.finalizer.AddFinalizer(ctx, cp); err != nil {
 		log.Debug("cannot add finalizer", "error", err)
-		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cc), "cannot add finalizer")
+		return reconcile.Result{Requeue: true}, errors.Wrap(r.client.Update(ctx, cp), "cannot add finalizer")
 	}
 
 	// TODO: add diff logic to decide when to delete/create the watcher
@@ -193,15 +192,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	// stop watchers
 	r.deleteWatcher(req.NamespacedName.String())
 	// start watchers
-	r.addWatcher(req.NamespacedName.String(), cc)
+	r.addWatcher(req.NamespacedName.String(), cp)
 	// trigger generic event to LCM controller
-	r.lcmGenericEventCh <- event.GenericEvent{Object: cc}
-	log.Debug("ctrlMetaCfg", "ctrlMetaCfg spec", cc.Spec)
+	r.lcmGenericEventCh <- event.GenericEvent{Object: cp}
+	log.Debug("ctrlMetaCfg", "ctrlMetaCfg spec", cp.Spec)
 
-	return reconcile.Result{RequeueAfter: r.pollInterval}, r.client.Update(ctx, cc)
+	return reconcile.Result{RequeueAfter: r.pollInterval}, r.client.Update(ctx, cp)
 }
 
-func (r *Reconciler) addWatcher(nsName string, cc *pkgmetav1.ControllerConfig) {
+func (r *Reconciler) addWatcher(nsName string, cp *pkgv1.CompositeProvider) {
 	r.m.Lock()
 	defer r.m.Unlock()
 	if _, ok := r.watchers[nsName]; !ok {
@@ -212,7 +211,7 @@ func (r *Reconciler) addWatcher(nsName string, cc *pkgmetav1.ControllerConfig) {
 
 		ctx, cfn := context.WithCancel(context.Background())
 		r.watchers[nsName] = cfn
-		w.Watch(ctx, cc)
+		w.Watch(ctx, cp)
 	}
 }
 

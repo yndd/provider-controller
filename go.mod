@@ -5,10 +5,10 @@ go 1.17
 require (
 	github.com/cert-manager/cert-manager v1.8.0
 	github.com/pkg/errors v0.9.1
-	github.com/yndd/ndd-core v0.2.20
+	//github.com/yndd/ndd-core v0.2.21-0.20220522041941-916ba78ae29f
 	github.com/yndd/ndd-runtime v0.5.8
 	github.com/yndd/ndd-target-runtime v0.0.41
-	github.com/yndd/registrator v0.0.10
+	github.com/yndd/registrator v0.0.15
 	k8s.io/api v0.24.0
 	k8s.io/apiextensions-apiserver v0.23.5
 	k8s.io/apimachinery v0.24.0
@@ -16,6 +16,8 @@ require (
 	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
 	sigs.k8s.io/controller-runtime v0.11.2
 )
+
+require github.com/yndd/ndd-core v0.2.21-0.20220522045503-0569467e8838
 
 require (
 	cloud.google.com/go v0.99.0 // indirect

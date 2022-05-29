@@ -25,7 +25,7 @@ import (
 
 	"github.com/openconfig/ygot/ygot"
 	"github.com/pkg/errors"
-	pkgmetav1 "github.com/yndd/ndd-core/apis/pkg/meta/v1"
+	pkgv1 "github.com/yndd/ndd-core/apis/pkg/v1"
 	"github.com/yndd/ndd-runtime/pkg/event"
 	"github.com/yndd/ndd-runtime/pkg/logging"
 	"github.com/yndd/ndd-runtime/pkg/meta"
@@ -80,9 +80,8 @@ type Reconciler struct {
 	watchers map[string]context.CancelFunc
 
 	newTarget func() targetv1.Tg
-	//newProviderRevision func() pkgv1.PackageRevision
-	log    logging.Logger
-	record event.Recorder
+	log       logging.Logger
+	record    event.Recorder
 }
 
 // WithLogger specifies how the Reconciler logs messages.
@@ -125,7 +124,7 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 	)
 
-	ControllerConfigHandler := &EnqueueRequestForAllControllerConfig{
+	CompositeProviderHandler := &EnqueueRequestForAllCompositeProvider{
 		client:        mgr.GetClient(),
 		log:           nddopts.Logger,
 		ctx:           context.Background(),
@@ -137,8 +136,8 @@ func Setup(mgr ctrl.Manager, nddopts *shared.NddControllerOptions) (chan cevent.
 		Named(name).
 		For(&targetv1.Target{}).
 		WithEventFilter(resource.IgnoreUpdateWithoutGenerationChangePredicate()).
-		Watches(&source.Kind{Type: &pkgmetav1.ControllerConfig{}}, ControllerConfigHandler).
-		Watches(&source.Channel{Source: e}, ControllerConfigHandler).
+		Watches(&source.Kind{Type: &pkgv1.CompositeProvider{}}, CompositeProviderHandler).
+		Watches(&source.Channel{Source: e}, CompositeProviderHandler).
 		Complete(r)
 }
 
@@ -189,26 +188,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	// get the proper controller config spec matching the vendor type
-	ccList := &pkgmetav1.ControllerConfigList{}
-	if err := r.client.List(ctx, ccList); err != nil {
+	cpList := &pkgv1.CompositeProviderList{}
+	if err := r.client.List(ctx, cpList); err != nil {
 		log.Debug(errGetCtrlMetaCfgList, "error", err)
 		return reconcile.Result{}, errors.Wrap(err, errGetCtrlMetaCfgList)
 	}
-	var cc *pkgmetav1.ControllerConfig
-	for _, cmc := range ccList.Items {
+	var cp *pkgv1.CompositeProvider
+	for _, cmc := range cpList.Items {
 		if cmc.Spec.VendorType == tspec.VendorType.String() {
-			cc = &cmc
+			cp = &cmc
 			break
 		}
 	}
-	if cc == nil {
+	if cp == nil {
 		// no controller config found for the target vendor type
 		log.Debug("no controller config found for vendor Type", "error", err)
 		return reconcile.Result{RequeueAfter: shortWait}, nil
 	}
 
 	// per service validate the allocation
-	for _, serviceInfo := range cc.GetServicesInfo() {
+	for _, serviceInfo := range cp.GetServicesInfo() {
 		log = log.WithValues("serviceName", serviceInfo.ServiceName)
 		// initialize allocation map if it is not initialized
 		if tspec.Allocation == nil {
@@ -220,7 +219,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		if !ok {
 			// service is not allocated
 			log.Debug("service is not allocated")
-			assigned := r.inventory.GetLeastLoaded(ctx, cc, serviceInfo.ServiceName)
+			assigned := r.inventory.GetLeastLoaded(ctx, cp, serviceInfo.ServiceName)
 			if assigned == "" {
 				return reconcile.Result{}, fmt.Errorf("could not assign an instance for service %q", serviceInfo.ServiceName)
 			}
@@ -255,8 +254,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 			}
 
 			// When the service is found
-			if serviceInfo.Kind == pkgmetav1.KindWorker {
-				targetServiceInfo := cc.GetTargetServiceInfo()
+			if serviceInfo.Kind == pkgv1.KindWorker {
+				targetServiceInfo := cp.GetTargetServiceInfo()
 
 				availableTargetServiceInstances, err := r.registrator.Query(
 					ctx,
@@ -281,7 +280,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}, errors.Wrap(r.client.Update(ctx, t), "cannot update target")
 }
 
-func (r *Reconciler) addWatcher(nsName string, cc *pkgmetav1.ControllerConfig) {
+func (r *Reconciler) addWatcher(nsName string, cc *pkgv1.CompositeProvider) {
 	r.m.Lock()
 	defer r.m.Unlock()
 	if _, ok := r.watchers[nsName]; !ok {
